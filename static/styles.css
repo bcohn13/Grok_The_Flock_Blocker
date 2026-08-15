@@ -259,6 +259,19 @@ main {
 
 .live-hud.level-close {
   color: var(--alert);
+  animation: flock-shout 0.22s steps(2, jump-end) infinite;
+}
+
+@keyframes flock-shout {
+  0% {
+    transform: translateX(-50%) scale(1) rotate(-1deg);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.08) rotate(1.5deg);
+  }
+  100% {
+    transform: translateX(-50%) scale(1) rotate(-1deg);
+  }
 }
 
 .live-panel {
