@@ -31,7 +31,7 @@ let lastNearestMeters = null;
 let focusCircle = null;
 let flockVoiceOn = false;
 let flockVoiceWatch = null;
-let demoWalkFlocks = [];
+let demoFlocks = [];
 
 const RESCAN_METERS = 1800;
 const GPS_OPTIONS = { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 };
@@ -64,7 +64,8 @@ function setBusy(on, label) {
       button.id === "stop-follow" ||
       button.id === "live-track" ||
       button.id === "demo-walk-to" ||
-      button.id === "demo-walk-from"
+      button.id === "demo-walk-from" ||
+      button.id === "demo-flocks-here"
     ) {
       return;
     }
@@ -89,6 +90,7 @@ function markerFor(camera) {
     `<strong>${escapeHtml(camera.manufacturer || "ALPR")}</strong><br/>` +
       `${escapeHtml(camera.street || camera.city || "Mapped location")}<br/>` +
       `source: ${escapeHtml(camera.source)} · confidence: ${escapeHtml(camera.confidence || "n/a")}` +
+      (camera.notes ? `<br/>${escapeHtml(camera.notes)}` : "") +
       (camera.source_url
         ? `<br/><a href="${camera.source_url}" target="_blank" rel="noopener">OpenStreetMap</a>`
         : "")
@@ -123,9 +125,37 @@ function compassBearing(lat1, lon1, lat2, lon2) {
   return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.floor((degrees + 22.5) / 45) % 8];
 }
 
+function isDemoFlockId(id) {
+  return String(id || "").startsWith("demo-");
+}
+
+function replaceDemoFlocks(prefix, pins) {
+  demoFlocks = demoFlocks.filter((pin) => !String(pin.id).startsWith(prefix)).concat(pins);
+}
+
+function offsetMeters(lat, lon, eastMeters, northMeters) {
+  const dLat = northMeters / 111320;
+  const dLon = eastMeters / (111320 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+  return { lat: lat + dLat, lon: lon + dLon };
+}
+
+function makeDemoFlock(id, lat, lon, street) {
+  return {
+    id,
+    lat,
+    lon,
+    manufacturer: "Flock Safety",
+    source: "seed",
+    street,
+    city: "Demo",
+    confidence: "low",
+    notes: "Temporary demo Flock pin. Not a real camera — for live tracking demos only.",
+  };
+}
+
 function drawCameras(cameras, fit = true) {
   const incoming = cameras || [];
-  const extras = demoWalkFlocks.filter((pin) => !incoming.some((camera) => camera.id === pin.id));
+  const extras = demoFlocks.filter((pin) => !incoming.some((camera) => camera.id === pin.id));
   loadedCameras = incoming.concat(extras);
   cameraLayer.clearLayers();
   loadedCameras.forEach((camera) => markerFor(camera).addTo(cameraLayer));
@@ -369,26 +399,43 @@ function armFlockVoice(preview) {
 
 function plantDemoFlockOnPath(path) {
   const fractions = [0.18, 0.48, 0.78];
-  demoWalkFlocks = fractions.map((fraction, index) => {
+  const pins = fractions.map((fraction, index) => {
     const point = path[Math.min(path.length - 1, Math.max(0, Math.floor(path.length * fraction)))];
-    return {
-      id: `demo-walk-flock-${index}`,
-      lat: point[0],
-      lon: point[1],
-      manufacturer: "Flock Safety",
-      source: "seed",
-      street: "Live demo walk pin",
-      city: "Demo",
-      confidence: "low",
-      notes: "Temporary demo Flock pin so Live demo walk can shout FLOCKBLOCK.",
-    };
+    return makeDemoFlock(
+      `demo-walk-flock-${index}`,
+      point[0],
+      point[1],
+      "Live demo walk pin"
+    );
   });
+  replaceDemoFlocks("demo-walk-flock-", pins);
   drawCameras(loadedCameras.filter((camera) => !String(camera.id).startsWith("demo-walk-flock-")), false);
 }
 
+function plantDemoFlocksNear(lat, lon) {
+  const layout = [
+    [18, 14, "Demo Flock · close"],
+    [-32, -18, "Demo Flock · close"],
+    [95, -40, "Demo Flock · nearby"],
+    [-160, 75, "Demo Flock · farther"],
+  ];
+  const pins = layout.map(([east, north, street], index) => {
+    const point = offsetMeters(lat, lon, east, north);
+    return makeDemoFlock(`demo-live-flock-${index}`, point.lat, point.lon, street);
+  });
+  replaceDemoFlocks("demo-live-flock-", pins);
+  drawCameras(loadedCameras.filter((camera) => !String(camera.id).startsWith("demo-live-flock-")), false);
+}
+
+function ensureDemoFlocksNear(lat, lon) {
+  if (demoFlocks.some((pin) => String(pin.id).startsWith("demo-live-flock-"))) return;
+  plantDemoFlocksNear(lat, lon);
+}
+
 function clearDemoWalkFlocks() {
-  if (!demoWalkFlocks.length) return;
-  demoWalkFlocks = [];
+  const next = demoFlocks.filter((pin) => !String(pin.id).startsWith("demo-walk-flock-"));
+  if (next.length === demoFlocks.length) return;
+  demoFlocks = next;
   drawCameras(
     loadedCameras.filter((camera) => !String(camera.id).startsWith("demo-walk-flock-")),
     false
@@ -552,9 +599,10 @@ function applyAlerts(alerts, lat, lon, accuracy, sourceLabel) {
   if (tracking) {
     const hudText =
       followMode === "demo" ? status.hud.replace(/^LIVE ·/, "LIVE DEMO ·") : status.hud;
+    const nearestIsDemoFlock = isDemoFlockId(status.nearest_flock?.camera?.id);
     const shouting =
       status.level === "close" ||
-      (followMode === "demo" &&
+      ((followMode === "demo" || nearestIsDemoFlock) &&
         Boolean(status.nearest_flock) &&
         status.nearest_flock.distance_meters <= LIVE_NEAR_FLOCK_M);
     updateLiveHud(shouting ? `FLOCKBLOCK · ${hudText}${acc}` : `${hudText}${acc}`, status.level);
@@ -597,6 +645,9 @@ async function checkSpot(coords, options = {}) {
   standAt(coords.lat, coords.lon, options.label, coords.accuracy);
   if (live) {
     await ensureCamerasAround(coords.lat, coords.lon);
+    if (followMode === "gps") {
+      ensureDemoFlocksNear(coords.lat, coords.lon);
+    }
     applyAlerts(
       localAlerts(coords.lat, coords.lon, radiusMeters()),
       coords.lat,
@@ -933,6 +984,28 @@ $("live-track").addEventListener("click", () => {
     return;
   }
   startGpsFollow();
+});
+
+$("demo-flocks-here").addEventListener("click", async () => {
+  try {
+    let coords = lastCoords;
+    if (!coords) {
+      coords = await locate();
+      standAt(coords.lat, coords.lon, "You (GPS, not stored)", coords.accuracy);
+    }
+    plantDemoFlocksNear(coords.lat, coords.lon);
+    applyAlerts(
+      localAlerts(coords.lat, coords.lon, radiusMeters()),
+      coords.lat,
+      coords.lon,
+      coords.accuracy,
+      "Demo Flock pins (on-device)"
+    );
+    $("response").textContent =
+      "Planted fake Flock pins around your current location. They stay in the browser and are labeled as demo. Turn on Live tracking to hear FLOCKBLOCK when you are close.";
+  } catch (err) {
+    $("response").textContent = String(err);
+  }
 });
 
 $("demo-walk-to").addEventListener("click", () => {
