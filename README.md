@@ -46,9 +46,9 @@ Suggested demo path (no GPS required):
 1. Click **San Francisco** (or another city chip). The map loads public OSM ALPR tags.
 2. Click **Stand at demo spot**, then **Check this spot**.
 3. Click **Live tracking** to keep the yellow marker on your GPS and get continuous nearby Flock / ALPR feedback plus a recommended civic action. Coordinates stay in the browser and are not stored.
-4. Click **Live demo walk to** or **Live demo walk from** if you cannot share GPS — it runs that same live feed along street geometry between **Route from** and **Route to**, plants demo Flock pins on the path, and shouts **FLOCKBLOCK FLOCKBLOCK FLOCKBLOKK** when you get close (4th Street in San Francisco when those ends are unset).
+4. Click **Live demo walk to** or **Live demo walk from** to run that live feed along the same **Route from** / **Route to** used for Recommend (current location, a search, a chip, or a map click). It shouts **FLOCKBLOCK** when you get close.
 5. Click anywhere on the map to stand there instead (disabled while following).
-6. Type **Route from** and **Route to** like Google Maps and pick a suggestion (or use a chip / map click). **Recommend route to** / **from** fetch walking directions on public streets and prefer the option with fewer mapped ALPR cameras.
+6. Set **Route from** and **Route to** with **From/To: current location**, a Maps-style search, a place chip, or a map click. Those same ends drive **Recommend route** and **Live demo walk**.
 7. Use **Ask the agents** for policy questions or a natural-language city search.
 
 Map scan hits OpenStreetMap only (usually a few seconds). Agent chat may also search the public web.

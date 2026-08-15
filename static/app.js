@@ -799,38 +799,17 @@ async function startDemoWalk(reverse = false) {
     return;
   }
   stopTracking();
-  armFlockVoice("Live demo walk. Flock block is armed.");
-  const preset = activePreset || presets[0];
-  if (!preset) {
-    $("response").textContent = "Pick a city first so the live demo walk can route on local streets.";
-    return;
-  }
   let origin;
   let dest;
   try {
-    origin =
-      (await resolveTypedEnd("from")) ||
-      lastCoords || {
-        lat: preset.stand_lat,
-        lon: preset.stand_lon,
-        label: preset.stand_label,
-      };
-    dest =
-      (await resolveTypedEnd("to")) || {
-        lat: preset.walk_dest_lat,
-        lon: preset.walk_dest_lon,
-        label: (preset.destinations && preset.destinations[0] && preset.destinations[0].name) || "Demo walk end",
-      };
+    ({ from: origin, to: dest } = await getRouteEnds());
   } catch (err) {
     $("response").textContent = String(err);
     return;
   }
-  if (!originCoords) {
-    setOrigin(origin.lat, origin.lon, origin.label || "Route from");
-  }
-  if (!destCoords) {
-    setDestination(dest.lat, dest.lon, dest.label || "Route to");
-  }
+  armFlockVoice("Live demo walk. Flock block is armed.");
+  setOrigin(origin.lat, origin.lon, origin.label || "Route from");
+  setDestination(dest.lat, dest.lon, dest.label || "Route to");
   setBusy(true, reverse ? "Starting live demo walk from…" : "Starting live demo walk to…");
   try {
     await ensureCamerasAround(origin.lat, origin.lon);
@@ -842,6 +821,8 @@ async function startDemoWalk(reverse = false) {
         lon: origin.lon,
         dest_lat: dest.lat,
         dest_lon: dest.lon,
+        origin: origin.label,
+        destination: dest.label,
         reverse,
       }),
     });
@@ -1049,13 +1030,28 @@ function setPointMode(mode) {
 function renderDestinations(preset) {
   const root = $("dest-presets");
   root.innerHTML = "";
+  if (preset.stand_lat != null) {
+    const standChip = document.createElement("button");
+    standChip.type = "button";
+    standChip.className = "chip";
+    standChip.textContent = `From: ${preset.stand_label}`;
+    standChip.addEventListener("click", () => {
+      setOrigin(preset.stand_lat, preset.stand_lon, preset.stand_label);
+    });
+    root.appendChild(standChip);
+  }
   (preset.destinations || []).forEach((dest) => {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "chip";
     chip.textContent = dest.name;
     chip.addEventListener("click", () => {
-      setDestination(dest.lat, dest.lon, dest.name);
+      if (settingPoint === "from") {
+        setOrigin(dest.lat, dest.lon, dest.name);
+        setPointMode(null);
+      } else {
+        setDestination(dest.lat, dest.lon, dest.name);
+      }
     });
     root.appendChild(chip);
   });
@@ -1201,24 +1197,46 @@ function bindPlaceSearch(kind) {
   });
 }
 
-async function recommendRoute(reverse = false) {
-  const preset = activePreset || presets[0];
-  const stand = lastCoords || (preset ? { lat: preset.stand_lat, lon: preset.stand_lon, label: preset.stand_label } : null);
-  let from = null;
-  let to = null;
+async function setEndToCurrentLocation(kind) {
   try {
-    from = (await resolveTypedEnd("from")) || stand;
-    to = await resolveTypedEnd("to");
+    let coords = lastCoords;
+    if (!coords) {
+      coords = await locate();
+      standAt(coords.lat, coords.lon, "You (GPS, not stored)", coords.accuracy);
+    }
+    const label = "Current location";
+    if (kind === "from") setOrigin(coords.lat, coords.lon, label);
+    else setDestination(coords.lat, coords.lon, label);
+    $("response").textContent = `Route ${kind} set to your current location. Same ends are used for Recommend and Live demo walk.`;
   } catch (err) {
     $("response").textContent = String(err);
-    return;
+  }
+}
+
+async function getRouteEnds() {
+  const from = (await resolveTypedEnd("from")) || (lastCoords
+    ? { lat: lastCoords.lat, lon: lastCoords.lon, label: "Current location" }
+    : null);
+  const to = await resolveTypedEnd("to");
+  if (from && from.label === "Current location" && !originCoords) {
+    setOrigin(from.lat, from.lon, from.label);
   }
   if (!from) {
-    $("response").textContent = "Set Route from: type a place, pick a suggestion, or stand somewhere.";
-    return;
+    throw new Error("Set Route from: current location, a search, a place chip, or the map.");
   }
   if (!to) {
-    $("response").textContent = "Set Route to: type a place, pick a suggestion, or click the map.";
+    throw new Error("Set Route to: current location, a search, a place chip, or the map.");
+  }
+  return { from, to };
+}
+
+async function recommendRoute(reverse = false) {
+  let from;
+  let to;
+  try {
+    ({ from, to } = await getRouteEnds());
+  } catch (err) {
+    $("response").textContent = String(err);
     return;
   }
   const body = {
@@ -1289,6 +1307,14 @@ $("swap-ends").addEventListener("click", () => {
   $("response").textContent = "Swapped Route from and Route to.";
 });
 
+$("from-here").addEventListener("click", () => {
+  setEndToCurrentLocation("from");
+});
+
+$("to-here").addEventListener("click", () => {
+  setEndToCurrentLocation("to");
+});
+
 $("chat-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = $("message").value.trim();
@@ -1305,13 +1331,13 @@ map.on("click", (event) => {
   if (settingPoint === "from") {
     setOrigin(event.latlng.lat, event.latlng.lng, "Map origin");
     setPointMode(null);
-    $("response").textContent = "Route from set. Recommend route to, or demo walk.";
+    $("response").textContent = "Route from set. Recommend or Live demo walk will use this start.";
     return;
   }
   if (settingPoint === "to") {
     setDestination(event.latlng.lat, event.latlng.lng, "Map destination");
     setPointMode(null);
-    $("response").textContent = "Route to set. Recommend a route or start a demo walk.";
+    $("response").textContent = "Route to set. Recommend or Live demo walk will use this end.";
     return;
   }
   standAt(event.latlng.lat, event.latlng.lng, "You (map click, not stored)");
