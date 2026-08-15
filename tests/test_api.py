@@ -61,6 +61,8 @@ def test_scan_and_nearby(monkeypatch):
     assert nearby.status_code == 200
     assert nearby.json()["count"] >= 1
     assert nearby.json()["alerts"]
+    assert nearby.json()["recommended_action"]
+    assert nearby.json()["level"] in {"clear", "watch", "nearby", "close"}
 
     live_calls = {"n": 0}
 
@@ -75,6 +77,8 @@ def test_scan_and_nearby(monkeypatch):
     )
     assert live.status_code == 200
     assert live.json()["count"] >= 1
+    assert live.json()["recommended_action"]
+    assert live.json()["level"] == "close"
     assert live_calls["n"] == 0
 
 
@@ -145,7 +149,7 @@ def test_index_served():
     page = client.get("/")
     assert page.status_code == 200
     assert b"Grok the Flock Blocker" in page.content
-    assert b"Follow my position" in page.content
+    assert b"Live tracking" in page.content
     assert b"Recommend route to" in page.content
     assert b"Recommend route from" in page.content
     assert b"Demo walk from" in page.content

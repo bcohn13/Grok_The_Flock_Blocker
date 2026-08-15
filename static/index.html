@@ -49,12 +49,23 @@
           <button type="button" id="near-me">Use my GPS</button>
         </div>
         <div class="row wrap">
-          <button type="button" id="follow-me">Follow my position</button>
+          <button type="button" id="live-track">Live tracking</button>
           <button type="button" id="stop-follow" class="hidden">Stop tracking</button>
         </div>
+        <section class="live-panel" id="live-panel">
+          <div class="live-panel-head">
+            <strong id="live-level">Live tracking off</strong>
+            <span id="live-counts"></span>
+          </div>
+          <p id="live-action" class="live-action">
+            Turn on Live tracking to continuously watch mapped Flock / ALPR cameras
+            around you and get a recommended civic action. Coordinates stay in the
+            browser and are not stored.
+          </p>
+        </section>
         <p class="hint" id="follow-hint">
-          Click the map to stand anywhere, or turn on follow to track your live GPS.
-          Coordinates stay in the browser and are not stored.
+          Live tracking uses your GPS (or the demo walk) and updates nearby Flock
+          feedback as you move. Click the map to stand anywhere when tracking is off.
         </p>
 
         <form id="route-form">
