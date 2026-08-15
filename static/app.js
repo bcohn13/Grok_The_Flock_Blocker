@@ -31,6 +31,7 @@ let lastNearestMeters = null;
 let focusCircle = null;
 let flockVoiceOn = false;
 let flockVoiceWatch = null;
+let demoWalkFlocks = [];
 
 const RESCAN_METERS = 1800;
 const GPS_OPTIONS = { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 };
@@ -123,7 +124,9 @@ function compassBearing(lat1, lon1, lat2, lon2) {
 }
 
 function drawCameras(cameras, fit = true) {
-  loadedCameras = cameras || [];
+  const incoming = cameras || [];
+  const extras = demoWalkFlocks.filter((pin) => !incoming.some((camera) => camera.id === pin.id));
+  loadedCameras = incoming.concat(extras);
   cameraLayer.clearLayers();
   loadedCameras.forEach((camera) => markerFor(camera).addTo(cameraLayer));
   if (fit && loadedCameras.length && !tracking) {
@@ -351,6 +354,47 @@ function shoutFlockBlock() {
   window.speechSynthesis.speak(utter);
 }
 
+function armFlockVoice(preview) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.getVoices();
+  const utter = new SpeechSynthesisUtterance(preview || "Flock block.");
+  const voice = pickObnoxiousVoice();
+  if (voice) utter.voice = voice;
+  utter.lang = voice?.lang || "en-US";
+  utter.rate = 1.25;
+  utter.pitch = 1.9;
+  utter.volume = 1;
+  window.speechSynthesis.speak(utter);
+}
+
+function plantDemoFlockOnPath(path) {
+  const fractions = [0.18, 0.48, 0.78];
+  demoWalkFlocks = fractions.map((fraction, index) => {
+    const point = path[Math.min(path.length - 1, Math.max(0, Math.floor(path.length * fraction)))];
+    return {
+      id: `demo-walk-flock-${index}`,
+      lat: point[0],
+      lon: point[1],
+      manufacturer: "Flock Safety",
+      source: "seed",
+      street: "Live demo walk pin",
+      city: "Demo",
+      confidence: "low",
+      notes: "Temporary demo Flock pin so Live demo walk can shout FLOCKBLOCK.",
+    };
+  });
+  drawCameras(loadedCameras.filter((camera) => !String(camera.id).startsWith("demo-walk-flock-")), false);
+}
+
+function clearDemoWalkFlocks() {
+  if (!demoWalkFlocks.length) return;
+  demoWalkFlocks = [];
+  drawCameras(
+    loadedCameras.filter((camera) => !String(camera.id).startsWith("demo-walk-flock-")),
+    false
+  );
+}
+
 function setFlockVoice(on) {
   if (on) {
     if (flockVoiceOn) {
@@ -438,6 +482,7 @@ function setTrackingUi(on, mode, options = {}) {
   $("stop-follow").classList.toggle("hidden", !on);
   if (!on) {
     stopFlockVoice();
+    clearDemoWalkFlocks();
     lastNearestMeters = null;
     if (options.keepStatus) {
       const hud = $("live-hud");
@@ -507,11 +552,13 @@ function applyAlerts(alerts, lat, lon, accuracy, sourceLabel) {
   if (tracking) {
     const hudText =
       followMode === "demo" ? status.hud.replace(/^LIVE ·/, "LIVE DEMO ·") : status.hud;
-    updateLiveHud(
-      status.level === "close" ? `FLOCKBLOCK · ${hudText}${acc}` : `${hudText}${acc}`,
-      status.level
-    );
-    setFlockVoice(status.level === "close");
+    const shouting =
+      status.level === "close" ||
+      (followMode === "demo" &&
+        Boolean(status.nearest_flock) &&
+        status.nearest_flock.distance_meters <= LIVE_NEAR_FLOCK_M);
+    updateLiveHud(shouting ? `FLOCKBLOCK · ${hudText}${acc}` : `${hudText}${acc}`, status.level);
+    setFlockVoice(shouting);
   } else {
     setFlockVoice(false);
   }
@@ -672,6 +719,7 @@ function startGpsFollow() {
   }
   stopTracking();
   setTrackingUi(true, "gps");
+  armFlockVoice("Live tracking. Flock block is armed.");
   $("live-level").textContent = "Live tracking on — waiting for GPS";
   $("live-counts").textContent = "";
   $("live-action").textContent =
@@ -726,6 +774,7 @@ async function animateAlongPath(path, streets, reverse) {
   }).addTo(map);
   map.fitBounds(routeLayer.getBounds(), { padding: [36, 36], maxZoom: 17 });
   await ensureCamerasAround(path[0][0], path[0][1]);
+  plantDemoFlockOnPath(path);
   for (let index = 0; index < path.length; index += 1) {
     if (generation !== demoWalkGeneration) return;
     const [lat, lon] = path[index];
@@ -736,7 +785,7 @@ async function animateAlongPath(path, streets, reverse) {
       $("response").textContent = String(err);
     }
     if (generation !== demoWalkGeneration) return;
-    await new Promise((resolve) => setTimeout(resolve, 450));
+    await new Promise((resolve) => setTimeout(resolve, flockVoiceOn ? 850 : 450));
   }
   if (generation !== demoWalkGeneration) return;
   stopTracking({ keepStatus: true });
@@ -750,6 +799,7 @@ async function startDemoWalk(reverse = false) {
     return;
   }
   stopTracking();
+  armFlockVoice("Live demo walk. Flock block is armed.");
   const preset = activePreset || presets[0];
   if (!preset) {
     $("response").textContent = "Pick a city first so the live demo walk can route on local streets.";
