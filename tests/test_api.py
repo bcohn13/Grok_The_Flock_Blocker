@@ -150,7 +150,8 @@ def test_index_served():
     assert page.status_code == 200
     assert b"Grok the Flock Blocker" in page.content
     assert b"Live tracking" in page.content
+    assert b"Live demo walk to" in page.content
+    assert b"Live demo walk from" in page.content
     assert b"Recommend route to" in page.content
     assert b"Recommend route from" in page.content
-    assert b"Demo walk from" in page.content
     assert b"Route from" in page.content
