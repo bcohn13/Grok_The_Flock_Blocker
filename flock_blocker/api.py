@@ -40,6 +40,7 @@ class WalkRouteRequest(BaseModel):
     lon: float
     dest_lat: float | None = None
     dest_lon: float | None = None
+    reverse: bool = False
 
 
 class PrivacyRouteRequest(BaseModel):
@@ -48,6 +49,10 @@ class PrivacyRouteRequest(BaseModel):
     dest_lat: float | None = None
     dest_lon: float | None = None
     destination: str | None = Field(default=None, max_length=200)
+    origin: str | None = Field(default=None, max_length=200)
+    origin_lat: float | None = None
+    origin_lon: float | None = None
+    reverse: bool = False
     scan: bool = True
 
 
@@ -136,6 +141,7 @@ def create_app() -> FastAPI:
                 payload.lon,
                 payload.dest_lat,
                 payload.dest_lon,
+                reverse=payload.reverse,
             )
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Street routing failed: {exc}") from exc
@@ -155,6 +161,10 @@ def create_app() -> FastAPI:
                 dest_lat=payload.dest_lat,
                 dest_lon=payload.dest_lon,
                 destination=payload.destination,
+                origin=payload.origin,
+                origin_lat=payload.origin_lat,
+                origin_lon=payload.origin_lon,
+                reverse=payload.reverse,
                 scan=payload.scan,
             )
         except ValueError as exc:

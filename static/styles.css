@@ -272,8 +272,8 @@ button.tracking {
 .dot.seed {
   background: var(--seed);
 }
-.dot.you {
-  background: var(--you);
+.dot.from {
+  background: #5ee0a0;
 }
 
 @media (max-width: 860px) {

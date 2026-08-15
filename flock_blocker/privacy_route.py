@@ -69,23 +69,61 @@ def _score_candidate(route: dict[str, Any], cameras: list[Camera]) -> dict[str, 
     }
 
 
+def _resolve_end(
+    lat: float | None,
+    lon: float | None,
+    name: str | None,
+    fallback_lat: float | None = None,
+    fallback_lon: float | None = None,
+    default_label: str = "Dropped pin",
+    missing: str = "Provide a place name or map coordinates.",
+) -> tuple[float, float, str]:
+    label = (name or "").strip() or default_label
+    if lat is not None and lon is not None:
+        return float(lat), float(lon), label
+    if name and name.strip():
+        geo = geocode_place(name)
+        if geo is None:
+            raise ValueError(f"Could not geocode {name!r}")
+        return float(geo["lat"]), float(geo["lon"]), str(geo.get("label") or name)
+    if fallback_lat is not None and fallback_lon is not None:
+        return float(fallback_lat), float(fallback_lon), label
+    raise ValueError(missing)
+
+
 def plan_privacy_route(
     lat: float,
     lon: float,
     dest_lat: float | None = None,
     dest_lon: float | None = None,
     destination: str | None = None,
+    origin: str | None = None,
+    origin_lat: float | None = None,
+    origin_lon: float | None = None,
+    reverse: bool = False,
     scan: bool = True,
 ) -> dict[str, Any]:
-    dest_label = destination
-    if dest_lat is None or dest_lon is None:
-        if not destination:
-            raise ValueError("Provide a destination name or dest_lat/dest_lon.")
-        geo = geocode_place(destination)
-        if geo is None:
-            raise ValueError(f"Could not geocode {destination!r}")
-        dest_lat, dest_lon = float(geo["lat"]), float(geo["lon"])
-        dest_label = str(geo["label"])
+    dest_lat, dest_lon, dest_label = _resolve_end(
+        dest_lat,
+        dest_lon,
+        destination,
+        default_label="Route to",
+        missing="Provide a destination name or dest_lat/dest_lon.",
+    )
+    lat, lon, origin_label = _resolve_end(
+        origin_lat,
+        origin_lon,
+        origin,
+        fallback_lat=lat,
+        fallback_lon=lon,
+        default_label="Route from",
+        missing="Provide an origin name or origin_lat/origin_lon.",
+    )
+    user_origin = (lat, lon, origin_label)
+    user_dest = (dest_lat, dest_lon, dest_label)
+    if reverse:
+        lat, lon, dest_lat, dest_lon = dest_lat, dest_lon, lat, lon
+        origin_label, dest_label = dest_label, origin_label
     if haversine_meters(lat, lon, dest_lat, dest_lon) < 80:
         raise ValueError("Origin and destination are too close to plan a route.")
 
@@ -134,17 +172,20 @@ def plan_privacy_route(
     baseline = min(unique, key=lambda item: item["distance_meters"])
     saved = max(0, baseline["camera_count"] - recommended["camera_count"])
     narrative = (
-        f"Recommended public-road route has {recommended['camera_count']} mapped ALPR "
-        f"camera(s) within {CAMERA_BUFFER_METERS} m of the roadway"
+        f"Recommended public-road route from {origin_label} to {dest_label} has "
+        f"{recommended['camera_count']} mapped ALPR camera(s) within {CAMERA_BUFFER_METERS} m "
+        f"of the roadway"
         + (f", {saved} fewer than the shortest option" if saved else "")
         + f" ({round(recommended['distance_meters'] / 1000, 2)} km). {DISCLAIMER}"
     )
     return {
-        "destination": dest_label,
-        "dest_lat": dest_lat,
-        "dest_lon": dest_lon,
-        "origin_lat": lat,
-        "origin_lon": lon,
+        "origin": user_origin[2],
+        "origin_lat": user_origin[0],
+        "origin_lon": user_origin[1],
+        "destination": user_dest[2],
+        "dest_lat": user_dest[0],
+        "dest_lon": user_dest[1],
+        "reverse": reverse,
         "recommended": _dump_route(recommended),
         "alternatives": [_dump_route(item) for item in unique[:4]],
         "narrative": narrative,

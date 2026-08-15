@@ -21,7 +21,10 @@ let scanningAround = false;
 let routeLayer = null;
 let destMarker = null;
 let destCoords = null;
-let settingDest = false;
+let originMarker = null;
+let originCoords = null;
+let settingPoint = null;
+let demoWalkReverse = false;
 let privacyLayers = [];
 
 const RESCAN_METERS = 1800;
@@ -44,7 +47,12 @@ function setBusy(on, label) {
   busy.textContent = label || "Working…";
   busy.classList.toggle("hidden", !on);
   document.querySelectorAll("button").forEach((button) => {
-    if (button.id === "stop-follow" || button.id === "follow-me" || button.id === "demo-walk") {
+    if (
+      button.id === "stop-follow" ||
+      button.id === "follow-me" ||
+      button.id === "demo-walk-to" ||
+      button.id === "demo-walk-from"
+    ) {
       return;
     }
     button.disabled = on;
@@ -204,7 +212,8 @@ function setTrackingUi(on, mode) {
   tracking = on;
   followMode = on ? mode : null;
   $("follow-me").classList.toggle("tracking", mode === "gps" && on);
-  $("demo-walk").classList.toggle("tracking", mode === "demo" && on);
+  $("demo-walk-to").classList.toggle("tracking", mode === "demo" && on && !demoWalkReverse);
+  $("demo-walk-from").classList.toggle("tracking", mode === "demo" && on && demoWalkReverse);
   $("stop-follow").classList.toggle("hidden", !on);
   if (!on) {
     updateLiveHud("");
@@ -423,10 +432,11 @@ function startGpsFollow() {
   );
 }
 
-function animateAlongPath(path, streets) {
+function animateAlongPath(path, streets, reverse) {
   const streetLabel = streets?.length ? streets.slice(0, 3).join(" → ") : "mapped streets";
+  demoWalkReverse = Boolean(reverse);
   setTrackingUi(true, "demo");
-  updateLiveHud(`Demo walk on ${streetLabel}`);
+  updateLiveHud(`Demo walk ${reverse ? "from" : "to"} on ${streetLabel}`);
   if (routeLayer) {
     map.removeLayer(routeLayer);
   }
@@ -452,32 +462,55 @@ function animateAlongPath(path, streets) {
   }, 450);
 }
 
-async function startDemoWalk() {
+async function startDemoWalk(reverse = false) {
+  if (tracking && followMode === "demo") {
+    stopTracking();
+    return;
+  }
   stopTracking();
   const preset = activePreset || presets[0];
   if (!preset) {
     $("response").textContent = "Pick a city first so the demo can route on local streets.";
     return;
   }
-  const start = lastCoords || { lat: preset.stand_lat, lon: preset.stand_lon };
-  setBusy(true, "Routing demo walk on streets…");
+  const origin =
+    originCoords ||
+    lastCoords || {
+      lat: preset.stand_lat,
+      lon: preset.stand_lon,
+      label: preset.stand_label,
+    };
+  const dest = destCoords || {
+    lat: preset.walk_dest_lat,
+    lon: preset.walk_dest_lon,
+    label: (preset.destinations && preset.destinations[0] && preset.destinations[0].name) || "Demo walk end",
+  };
+  if (!originCoords) {
+    setOrigin(origin.lat, origin.lon, origin.label || "Route from");
+  }
+  if (!destCoords) {
+    setDestination(dest.lat, dest.lon, dest.label || "Route to");
+  }
+  setBusy(true, reverse ? "Routing demo walk from…" : "Routing demo walk to…");
   try {
     const data = await fetchJson("/api/walk-route", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        lat: start.lat,
-        lon: start.lon,
-        dest_lat: preset.walk_dest_lat,
-        dest_lon: preset.walk_dest_lon,
+        lat: origin.lat,
+        lon: origin.lon,
+        dest_lat: dest.lat,
+        dest_lon: dest.lon,
+        reverse,
       }),
     });
     const path = (data.points || []).map((point) => [point.lat, point.lon]);
     if (path.length < 2) {
       throw new Error("No street geometry returned for this demo walk.");
     }
-    $("trace").textContent = `Street route (${data.source || "osrm"}) · ${data.distance_meters || "?"} m`;
-    animateAlongPath(path, data.streets || []);
+    $("trace").textContent =
+      `Street route ${reverse ? "from" : "to"} (${data.source || "osrm"}) · ${data.distance_meters || "?"} m`;
+    animateAlongPath(path, data.streets || [], reverse);
   } catch (err) {
     $("response").textContent = String(err);
     setTrackingUi(false);
@@ -506,6 +539,13 @@ function renderPresets() {
         place: preset.name,
         radius_meters: preset.scan_radius_meters,
       });
+      setOrigin(preset.stand_lat, preset.stand_lon, preset.stand_label);
+      const firstDest = (preset.destinations || [])[0];
+      if (firstDest) {
+        setDestination(firstDest.lat, firstDest.lon, firstDest.name);
+      } else if (preset.walk_dest_lat != null) {
+        setDestination(preset.walk_dest_lat, preset.walk_dest_lon, "Demo walk end");
+      }
       renderDestinations(preset);
     });
     root.appendChild(chip);
@@ -541,7 +581,8 @@ $("stand-preset").addEventListener("click", () => {
   if (!preset) return;
   stopTracking();
   standAt(preset.stand_lat, preset.stand_lon, `You · ${preset.stand_label}`);
-  $("response").textContent = `Standing at ${preset.stand_label}. Click Check this spot or Demo walk.`;
+  setOrigin(preset.stand_lat, preset.stand_lon, preset.stand_label);
+  $("response").textContent = `Standing at ${preset.stand_label}. Set Route to, then recommend or demo walk.`;
 });
 
 $("check-spot").addEventListener("click", async () => {
@@ -571,12 +612,12 @@ $("follow-me").addEventListener("click", () => {
   startGpsFollow();
 });
 
-$("demo-walk").addEventListener("click", () => {
-  if (tracking && followMode === "demo") {
-    stopTracking();
-    return;
-  }
-  startDemoWalk();
+$("demo-walk-to").addEventListener("click", () => {
+  startDemoWalk(false);
+});
+
+$("demo-walk-from").addEventListener("click", () => {
+  startDemoWalk(true);
 });
 
 $("stop-follow").addEventListener("click", () => {
@@ -589,8 +630,25 @@ function clearPrivacyRoutes() {
   privacyLayers = [];
 }
 
+function setOrigin(lat, lon, label) {
+  originCoords = { lat, lon, label: label || "Route from" };
+  $("origin").value = originCoords.label;
+  if (originMarker) {
+    originMarker.setLatLng([lat, lon]);
+  } else {
+    originMarker = L.circleMarker([lat, lon], {
+      radius: 8,
+      color: "#5ee0a0",
+      fillColor: "#5ee0a0",
+      fillOpacity: 1,
+      weight: 2,
+    }).addTo(map);
+  }
+  originMarker.bindPopup(escapeHtml(originCoords.label));
+}
+
 function setDestination(lat, lon, label) {
-  destCoords = { lat, lon, label: label || "Destination" };
+  destCoords = { lat, lon, label: label || "Route to" };
   $("destination").value = destCoords.label;
   if (destMarker) {
     destMarker.setLatLng([lat, lon]);
@@ -604,6 +662,46 @@ function setDestination(lat, lon, label) {
     }).addTo(map);
   }
   destMarker.bindPopup(escapeHtml(destCoords.label)).openPopup();
+}
+
+function swapEnds() {
+  const from = originCoords ? { ...originCoords } : null;
+  const to = destCoords ? { ...destCoords } : null;
+  const fromText = $("origin").value;
+  const toText = $("destination").value;
+  if (to) {
+    setOrigin(to.lat, to.lon, to.label);
+  } else {
+    originCoords = null;
+    $("origin").value = toText;
+    if (originMarker) {
+      map.removeLayer(originMarker);
+      originMarker = null;
+    }
+  }
+  if (from) {
+    setDestination(from.lat, from.lon, from.label);
+  } else {
+    destCoords = null;
+    $("destination").value = fromText;
+    if (destMarker) {
+      map.removeLayer(destMarker);
+      destMarker = null;
+    }
+  }
+}
+
+function setPointMode(mode) {
+  settingPoint = settingPoint === mode ? null : mode;
+  $("set-from-map").classList.toggle("tracking", settingPoint === "from");
+  $("set-dest-map").classList.toggle("tracking", settingPoint === "to");
+  if (settingPoint === "from") {
+    $("response").textContent = "Click the map to set Route from.";
+  } else if (settingPoint === "to") {
+    $("response").textContent = "Click the map to set Route to.";
+  } else {
+    $("response").textContent = "Map click cancelled.";
+  }
 }
 
 function renderDestinations(preset) {
@@ -636,8 +734,11 @@ function drawPrivacyRoutes(data) {
     ).addTo(map);
     privacyLayers.push(line);
   });
+  if (data.origin_lat && data.origin_lon) {
+    setOrigin(data.origin_lat, data.origin_lon, data.origin || "Route from");
+  }
   if (data.dest_lat && data.dest_lon) {
-    setDestination(data.dest_lat, data.dest_lon, data.destination || "Destination");
+    setDestination(data.dest_lat, data.dest_lon, data.destination || "Route to");
   }
   if (privacyLayers.length) {
     map.fitBounds(privacyLayers[0].getBounds(), { padding: [40, 40] });
@@ -664,27 +765,43 @@ function renderRouteOptions(data) {
   });
 }
 
-async function recommendRoute() {
+async function recommendRoute(reverse = false) {
   const preset = activePreset || presets[0];
-  const origin = lastCoords || (preset ? { lat: preset.stand_lat, lon: preset.stand_lon } : null);
-  if (!origin) {
-    $("response").textContent = "Stand somewhere first, or pick a demo city.";
+  const stand = lastCoords || (preset ? { lat: preset.stand_lat, lon: preset.stand_lon, label: preset.stand_label } : null);
+  const originText = $("origin").value.trim();
+  const destText = $("destination").value.trim();
+  const origin = originCoords || (!originText ? stand : null);
+  const dest = destCoords;
+  if (!origin && !originText && !stand) {
+    $("response").textContent = "Set Route from, stand somewhere, or pick a demo city.";
     return;
   }
-  const body = { lat: origin.lat, lon: origin.lon, scan: true };
+  if (!dest && !destText) {
+    $("response").textContent = "Set Route to: pick a chip, type a place, or click the map.";
+    return;
+  }
+  const start = origin || stand;
+  const body = {
+    lat: start.lat,
+    lon: start.lon,
+    scan: true,
+    reverse,
+    origin: originText || (origin && origin.label) || undefined,
+    destination: destText || (dest && dest.label) || undefined,
+  };
+  if (originCoords) {
+    body.origin_lat = originCoords.lat;
+    body.origin_lon = originCoords.lon;
+  } else if (!originText && start) {
+    body.origin_lat = start.lat;
+    body.origin_lon = start.lon;
+    body.origin = start.label || body.origin;
+  }
   if (destCoords) {
     body.dest_lat = destCoords.lat;
     body.dest_lon = destCoords.lon;
-    body.destination = destCoords.label;
-  } else {
-    const named = $("destination").value.trim();
-    if (!named) {
-      $("response").textContent = "Set a destination chip, type a place, or click the map.";
-      return;
-    }
-    body.destination = named;
   }
-  setBusy(true, "Comparing public-road routes…");
+  setBusy(true, reverse ? "Comparing routes from…" : "Comparing routes to…");
   try {
     const data = await fetchJson("/api/privacy-route", {
       method: "POST",
@@ -694,7 +811,9 @@ async function recommendRoute() {
     drawPrivacyRoutes(data);
     renderRouteOptions(data);
     $("response").textContent = data.narrative || "";
-    $("trace").textContent = "Privacy route planner · public roads only";
+    $("trace").textContent = reverse
+      ? "Privacy route planner · from destination back to origin · public roads only"
+      : "Privacy route planner · origin to destination · public roads only";
     renderAlerts(
       (data.recommended?.cameras || []).slice(0, 8).map((camera) => ({
         camera,
@@ -711,18 +830,31 @@ async function recommendRoute() {
 $("route-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    await recommendRoute();
+    await recommendRoute(false);
   } catch (err) {
     $("response").textContent = String(err);
   }
 });
 
+$("route-from").addEventListener("click", async () => {
+  try {
+    await recommendRoute(true);
+  } catch (err) {
+    $("response").textContent = String(err);
+  }
+});
+
+$("set-from-map").addEventListener("click", () => {
+  setPointMode("from");
+});
+
 $("set-dest-map").addEventListener("click", () => {
-  settingDest = !settingDest;
-  $("set-dest-map").classList.toggle("tracking", settingDest);
-  $("response").textContent = settingDest
-    ? "Click the map to set your destination."
-    : "Destination click cancelled.";
+  setPointMode("to");
+});
+
+$("swap-ends").addEventListener("click", () => {
+  swapEnds();
+  $("response").textContent = "Swapped Route from and Route to.";
 });
 
 $("chat-form").addEventListener("submit", async (event) => {
@@ -738,10 +870,16 @@ $("chat-form").addEventListener("submit", async (event) => {
 
 map.on("click", (event) => {
   if (tracking) return;
-  if (settingDest) {
+  if (settingPoint === "from") {
+    setOrigin(event.latlng.lat, event.latlng.lng, "Map origin");
+    setPointMode(null);
+    $("response").textContent = "Route from set. Recommend route to, or demo walk.";
+    return;
+  }
+  if (settingPoint === "to") {
     setDestination(event.latlng.lat, event.latlng.lng, "Map destination");
-    settingDest = false;
-    $("set-dest-map").classList.remove("tracking");
+    setPointMode(null);
+    $("response").textContent = "Route to set. Recommend a route or start a demo walk.";
     return;
   }
   standAt(event.latlng.lat, event.latlng.lng, "You (map click, not stored)");

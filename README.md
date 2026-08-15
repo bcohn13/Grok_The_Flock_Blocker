@@ -46,9 +46,9 @@ Suggested demo path (no GPS required):
 1. Click **San Francisco** (or another city chip). The map loads public OSM ALPR tags.
 2. Click **Stand at demo spot**, then **Check this spot**.
 3. Click **Follow my position** to keep the yellow marker on your live GPS and refresh nearby alerts as you move. Coordinates stay in the browser and are not stored.
-4. Click **Demo walk** if you cannot share GPS — it routes on public streets (4th Street in San Francisco) instead of cutting through buildings.
+4. Click **Demo walk to** or **Demo walk from** if you cannot share GPS — it follows street geometry between **Route from** and **Route to** (4th Street in San Francisco when those are unset).
 5. Click anywhere on the map to stand there instead (disabled while following).
-6. Set a destination (Ferry Building chip, typed place, or **Click map for destination**) and hit **Recommend route**. The planner compares legal public-road options and prefers the one with the fewest mapped ALPR cameras.
+6. Set **Route from** and **Route to** (city stand + Ferry Building chip, typed places, or **Click map for from/to**). **Recommend route to** plans origin → destination; **Recommend route from** plans the other direction. The planner compares legal public-road options and prefers the one with the fewest mapped ALPR cameras.
 7. Use **Ask the agents** for policy questions or a natural-language city search.
 
 Map scan hits OpenStreetMap only (usually a few seconds). Agent chat may also search the public web.

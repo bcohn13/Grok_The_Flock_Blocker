@@ -32,6 +32,32 @@ def test_walking_route_uses_osrm_geometry(monkeypatch):
 
 
 def test_walking_route_uses_fourth_street_in_soma():
-    result = walking_route(37.7809, -122.3998, 37.7857, -122.4059)
+    result = walking_route(37.7809, -122.3998)
     assert result["source"] == "osm-centerline"
     assert result["streets"] == ["4th Street"]
+
+
+def test_walking_route_reverse_starts_at_destination(monkeypatch):
+    seen: dict[str, tuple[float, float, float, float]] = {}
+
+    def fake(lat, lon, dest_lat, dest_lon):
+        seen["coords"] = (lat, lon, dest_lat, dest_lon)
+        return {
+            "points": [(lat, lon), (dest_lat, dest_lon)],
+            "streets": ["4th Street"],
+            "distance_meters": 100,
+            "source": "osrm",
+        }
+
+    monkeypatch.setattr("flock_blocker.walk_route.fetch_osrm_route", fake)
+    result = walking_route(37.78, -122.40, 37.79, -122.39, reverse=True)
+    assert seen["coords"] == (37.79, -122.39, 37.78, -122.40)
+    assert result["points"][0] == (37.79, -122.39)
+    assert result["points"][-1] == (37.78, -122.40)
+
+
+def test_walking_route_reverse_fourth_street_without_dest():
+    forward = walking_route(37.7809, -122.3998)
+    backward = walking_route(37.7809, -122.3998, reverse=True)
+    assert backward["points"] == list(reversed(forward["points"]))
+    assert backward["source"] == "osm-centerline-reverse"
