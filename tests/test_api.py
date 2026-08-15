@@ -170,3 +170,5 @@ def test_index_served():
     assert b"FLOCKBLOCK FLOCKBLOCK FLOCKBLOKK" in page.content
     assert b"demo Flock pins" in page.content
     assert b"Search a start" in page.content
+    assert b"From: current location" in page.content
+    assert b"To: current location" in page.content

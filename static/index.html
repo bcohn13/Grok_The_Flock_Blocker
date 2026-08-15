@@ -89,6 +89,10 @@
           </div>
           <div class="chips" id="dest-presets"></div>
           <div class="row wrap">
+            <button type="button" id="from-here">From: current location</button>
+            <button type="button" id="to-here">To: current location</button>
+          </div>
+          <div class="row wrap">
             <button type="button" id="set-from-map">Click map for from</button>
             <button type="button" id="set-dest-map">Click map for to</button>
             <button type="button" id="swap-ends">Swap from / to</button>
@@ -98,9 +102,10 @@
             <button type="button" id="route-from">Recommend route from</button>
           </div>
           <p class="hint">
-            Type From and To like Google Maps — pick a suggestion, then Recommend
-            or Live demo walk. Routing uses public walking directions on legal
-            streets. Maps are incomplete — this is not a way to evade police.
+            The same From and To are used for Recommend route and Live demo walk.
+            Set each end to your current location, a search suggestion, a place chip,
+            or a map click. Routing uses public walking directions on legal streets.
+            Maps are incomplete — this is not a way to evade police.
           </p>
         </form>
         <ul class="route-options" id="route-options"></ul>
