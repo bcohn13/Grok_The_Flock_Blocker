@@ -49,28 +49,48 @@
           <button type="button" id="near-me">Use my GPS</button>
         </div>
         <div class="row wrap">
-          <button type="button" id="follow-me">Follow my position</button>
-          <button type="button" id="demo-walk">Demo walk</button>
+          <button type="button" id="live-track">Live tracking</button>
           <button type="button" id="stop-follow" class="hidden">Stop tracking</button>
         </div>
+        <section class="live-panel" id="live-panel">
+          <div class="live-panel-head">
+            <strong id="live-level">Live tracking off</strong>
+            <span id="live-counts"></span>
+          </div>
+          <p id="live-action" class="live-action">
+            Turn on Live tracking to continuously watch mapped Flock / ALPR cameras
+            around you and get a recommended civic action. Coordinates stay in the
+            browser and are not stored.
+          </p>
+        </section>
         <p class="hint" id="follow-hint">
-          Click the map to stand anywhere, or turn on follow to track your live GPS.
-          Coordinates stay in the browser and are not stored. Demo walk follows
-          public street geometry (not shortcuts through buildings).
+          Live tracking uses your GPS (or the demo walk) and updates nearby Flock
+          feedback as you move. Click the map to stand anywhere when tracking is off.
         </p>
 
         <form id="route-form">
-          <label for="destination">Route with fewer mapped cameras</label>
+          <label for="origin">Route from</label>
+          <input id="origin" type="text" placeholder="4th &amp; Harrison, San Francisco" />
+          <label for="destination">Route to</label>
           <input id="destination" type="text" placeholder="Ferry Building, San Francisco" />
           <div class="chips" id="dest-presets"></div>
           <div class="row wrap">
-            <button type="submit">Recommend route</button>
-            <button type="button" id="set-dest-map">Click map for destination</button>
+            <button type="button" id="set-from-map">Click map for from</button>
+            <button type="button" id="set-dest-map">Click map for to</button>
+            <button type="button" id="swap-ends">Swap from / to</button>
+          </div>
+          <div class="row wrap">
+            <button type="submit" id="route-to">Recommend route to</button>
+            <button type="button" id="route-from">Recommend route from</button>
+          </div>
+          <div class="row wrap">
+            <button type="button" id="demo-walk-to">Demo walk to</button>
+            <button type="button" id="demo-walk-from">Demo walk from</button>
           </div>
           <p class="hint">
-            Compares legal public-road options and prefers the one with the fewest
-            mapped ALPR cameras. Maps are incomplete — this is not a way to evade
-            police or become invisible.
+            Recommend compares legal public-road options and prefers fewer mapped
+            ALPR cameras. Demo walk follows street geometry between From and To.
+            Maps are incomplete — this is not a way to evade police.
           </p>
         </form>
         <ul class="route-options" id="route-options"></ul>
@@ -107,7 +127,9 @@
           <span><i class="dot news"></i> News pin</span>
           <span><i class="dot seed"></i> Demo seed</span>
           <span><i class="dot you"></i> You</span>
-          <span><i class="line rec"></i> Fewer cameras</span>
+          <span><i class="dot from"></i> From</span>
+          <span><i class="dot news"></i> To</span>
+          <span><i class="line rec"></i> Route</span>
         </div>
       </main>
     </div>

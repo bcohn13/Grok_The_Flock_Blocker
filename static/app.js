@@ -21,11 +21,23 @@ let scanningAround = false;
 let routeLayer = null;
 let destMarker = null;
 let destCoords = null;
-let settingDest = false;
+let originMarker = null;
+let originCoords = null;
+let settingPoint = null;
+let demoWalkReverse = false;
 let privacyLayers = [];
+let lastNearestMeters = null;
+let focusCircle = null;
 
 const RESCAN_METERS = 1800;
 const GPS_OPTIONS = { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 };
+const LIVE_CLOSE_FLOCK_M = 50;
+const LIVE_NEAR_FLOCK_M = 150;
+const LIVE_CLOSE_ALPR_M = 30;
+const LIVE_NEAR_ALPR_M = 80;
+const LIVE_TREND_M = 8;
+const LIVE_DISCLAIMER =
+  "Public maps are incomplete and may be stale. This is civic awareness, not a live camera feed, and not a way to evade law enforcement.";
 
 const colors = {
   openstreetmap: "#5ee0a0",
@@ -44,7 +56,12 @@ function setBusy(on, label) {
   busy.textContent = label || "Working…";
   busy.classList.toggle("hidden", !on);
   document.querySelectorAll("button").forEach((button) => {
-    if (button.id === "stop-follow" || button.id === "follow-me" || button.id === "demo-walk") {
+    if (
+      button.id === "stop-follow" ||
+      button.id === "live-track" ||
+      button.id === "demo-walk-to" ||
+      button.id === "demo-walk-from"
+    ) {
       return;
     }
     button.disabled = on;
@@ -147,6 +164,141 @@ function standAt(lat, lon, label, accuracy) {
   }
 }
 
+function isFlockCamera(camera) {
+  return (camera?.manufacturer || "").toLowerCase().startsWith("flock");
+}
+
+function liveTrend(current, previous) {
+  if (current == null || previous == null) return "steady";
+  if (current <= previous - LIVE_TREND_M) return "approaching";
+  if (current >= previous + LIVE_TREND_M) return "receding";
+  return "steady";
+}
+
+function liveStatusFromAlerts(alerts, radius, previousNearest) {
+  const ranked = (alerts || [])
+    .slice()
+    .sort((a, b) => a.distance_meters - b.distance_meters);
+  const nearest = ranked[0] || null;
+  const flockAlerts = ranked.filter((item) => isFlockCamera(item.camera));
+  const nearestFlock = flockAlerts[0] || null;
+  const flockCount = flockAlerts.length;
+  const trend = liveTrend(nearest ? nearest.distance_meters : null, previousNearest);
+  let level = "clear";
+  if (nearest) {
+    const nearestM = nearest.distance_meters;
+    const flockM = nearestFlock ? nearestFlock.distance_meters : Infinity;
+    if (flockM <= LIVE_CLOSE_FLOCK_M || nearestM <= LIVE_CLOSE_ALPR_M) level = "close";
+    else if (flockM <= LIVE_NEAR_FLOCK_M || nearestM <= LIVE_NEAR_ALPR_M) level = "nearby";
+    else level = "watch";
+  }
+  const focus = nearestFlock || nearest;
+  const who = focus?.camera?.manufacturer || "ALPR camera";
+  const distance = focus ? Math.round(focus.distance_meters) : 0;
+  const bearing = focus?.bearing || "";
+  const where = focus ? ` about ${distance} m${bearing ? ` ${bearing}` : ""}` : "";
+  const clause =
+    trend === "approaching"
+      ? "; you are moving closer"
+      : trend === "receding"
+        ? "; you are moving farther away"
+        : "";
+  let recommendedAction;
+  if (level === "clear") {
+    recommendedAction =
+      `No publicly mapped ALPR cameras within ${radius} m. Recommended action: continue on public roads as usual, and keep live tracking on if you want updates as you move. That does not mean the area is camera-free. ${LIVE_DISCLAIMER}`;
+  } else if (level === "watch") {
+    recommendedAction =
+      `${ranked.length} mapped ALPR camera(s) in your ${radius} m alert radius (${flockCount} tagged Flock). Nearest is${where} (${who}). Recommended action: stay aware you may be photographed on this public roadway. If you want a path with fewer mapped cameras, use Recommend route. ${LIVE_DISCLAIMER}`;
+  } else if (level === "nearby") {
+    recommendedAction =
+      `Mapped ${who}${where}${clause}. Recommended action: you may be scanned on this public road. Stay on a legal route; if you prefer fewer mapped cameras ahead, compare public-road options with Recommend route. Do not interfere with cameras. ${LIVE_DISCLAIMER}`;
+  } else {
+    recommendedAction =
+      `You are within about ${distance} m of a mapped ${who}${bearing ? ` ${bearing}` : ""}${clause} — likely inside a typical ALPR capture range. Recommended action: proceed legally on this public roadway. For later legs of this trip, Recommend route can compare public-road options with fewer mapped cameras. Do not interfere with equipment. ${LIVE_DISCLAIMER}`;
+  }
+  const flockM = nearestFlock ? nearestFlock.distance_meters : Infinity;
+  let hud;
+  if (!nearest) {
+    hud = `LIVE · CLEAR · 0 cameras in ${radius} m`;
+  } else if (level === "watch") {
+    hud = `LIVE · WATCH · ${ranked.length} ALPR · nearest ${distance} m ${bearing}`.trim();
+  } else if (level === "close") {
+    const label = flockM <= LIVE_CLOSE_FLOCK_M ? "FLOCK CLOSE" : "CLOSE";
+    const shown = label.startsWith("FLOCK") ? nearestFlock : nearest;
+    hud = `LIVE · ${label} · ${Math.round(shown.distance_meters)} m ${shown.bearing || ""}`.trim();
+  } else {
+    const label = flockM <= LIVE_NEAR_FLOCK_M ? "FLOCK NEARBY" : "NEARBY";
+    const shown = label.startsWith("FLOCK") ? nearestFlock : nearest;
+    hud = `LIVE · ${label} · ${Math.round(shown.distance_meters)} m ${shown.bearing || ""}`.trim();
+  }
+  return {
+    level,
+    trend,
+    count: ranked.length,
+    flock_count: flockCount,
+    recommended_action: recommendedAction,
+    hud,
+    nearest,
+    nearest_flock: nearestFlock,
+  };
+}
+
+function resetLivePanel() {
+  const panel = $("live-panel");
+  panel.className = "live-panel";
+  $("live-level").textContent = "Live tracking off";
+  $("live-counts").textContent = "";
+  $("live-action").textContent =
+    "Turn on Live tracking to continuously watch mapped Flock / ALPR cameras around you and get a recommended civic action. Coordinates stay in the browser and are not stored.";
+}
+
+function renderLiveStatus(status, options = {}) {
+  const panel = $("live-panel");
+  const levels = ["clear", "watch", "nearby", "close"];
+  panel.className = "live-panel";
+  if (status?.level && levels.includes(status.level)) {
+    panel.classList.add(`level-${status.level}`);
+  }
+  const titles = {
+    clear: "Clear — no mapped cameras in range",
+    watch: "Watch — mapped cameras in radius",
+    nearby: status?.nearest_flock ? "Flock nearby" : "ALPR nearby",
+    close: status?.nearest_flock && status.nearest_flock.distance_meters <= LIVE_CLOSE_FLOCK_M
+      ? "Flock close — likely in range"
+      : "Close — likely in range",
+  };
+  $("live-level").textContent = titles[status?.level] || "Live tracking";
+  const flock = status?.flock_count || 0;
+  $("live-counts").textContent = status
+    ? `${status.count || 0} ALPR · ${flock} Flock`
+    : "";
+  $("live-action").textContent = status?.recommended_action || "";
+  if (options.tracking) {
+    const hud = $("live-hud");
+    hud.textContent = status?.hud || "LIVE";
+    hud.classList.toggle("hidden", false);
+    hud.classList.remove("level-clear", "level-watch", "level-nearby", "level-close");
+    if (status?.level) hud.classList.add(`level-${status.level}`);
+  }
+}
+
+function highlightNearest(alert) {
+  if (focusCircle) {
+    map.removeLayer(focusCircle);
+    focusCircle = null;
+  }
+  if (!alert?.camera) return;
+  const flock = isFlockCamera(alert.camera);
+  focusCircle = L.circle([alert.camera.lat, alert.camera.lon], {
+    radius: 70,
+    color: flock ? "#ff8a5b" : "#f2c14e",
+    weight: 2,
+    fillColor: flock ? "#ff8a5b" : "#f2c14e",
+    fillOpacity: 0.08,
+  }).addTo(map);
+}
+
 function radiusMeters() {
   return Number($("radius").value);
 }
@@ -194,20 +346,26 @@ function renderSources(items) {
   });
 }
 
-function updateLiveHud(text) {
+function updateLiveHud(text, level) {
   const hud = $("live-hud");
   hud.textContent = text;
   hud.classList.toggle("hidden", !tracking);
+  hud.classList.remove("level-clear", "level-watch", "level-nearby", "level-close");
+  if (level) hud.classList.add(`level-${level}`);
 }
 
 function setTrackingUi(on, mode) {
   tracking = on;
   followMode = on ? mode : null;
-  $("follow-me").classList.toggle("tracking", mode === "gps" && on);
-  $("demo-walk").classList.toggle("tracking", mode === "demo" && on);
+  $("live-track").classList.toggle("tracking", mode === "gps" && on);
+  $("demo-walk-to").classList.toggle("tracking", mode === "demo" && on && !demoWalkReverse);
+  $("demo-walk-from").classList.toggle("tracking", mode === "demo" && on && demoWalkReverse);
   $("stop-follow").classList.toggle("hidden", !on);
   if (!on) {
+    lastNearestMeters = null;
     updateLiveHud("");
+    resetLivePanel();
+    highlightNearest(null);
     if (accuracyCircle) {
       map.removeLayer(accuracyCircle);
       accuracyCircle = null;
@@ -257,11 +415,13 @@ function applyAlerts(alerts, lat, lon, accuracy, sourceLabel) {
   const radius = radiusMeters();
   const nearest = alerts[0];
   const acc = typeof accuracy === "number" ? ` · ±${Math.round(accuracy)} m` : "";
-  const key = `${alerts.length}:${nearest ? nearest.camera.id : "none"}:${Math.round(nearest ? nearest.distance_meters : 0)}`;
+  const status = liveStatusFromAlerts(alerts, radius, lastNearestMeters);
+  const key = `${status.level}:${alerts.length}:${nearest ? nearest.camera.id : "none"}:${Math.round(nearest ? nearest.distance_meters : 0)}:${status.trend}`;
+  lastNearestMeters = nearest ? nearest.distance_meters : null;
+  highlightNearest(status.nearest_flock || status.nearest);
+  renderLiveStatus(status, { tracking });
   if (tracking) {
-    updateLiveHud(
-      `Following${acc} · ${alerts.length} camera${alerts.length === 1 ? "" : "s"} in ${radius} m`
-    );
+    updateLiveHud(`${status.hud}${acc}`, status.level);
   }
   if (tracking && key === lastAlertKey) {
     return;
@@ -269,9 +429,7 @@ function applyAlerts(alerts, lat, lon, accuracy, sourceLabel) {
   lastAlertKey = key;
   renderAlerts(alerts);
   $("trace").textContent = sourceLabel;
-  $("response").textContent = alerts.length
-    ? `${alerts.length} publicly mapped ALPR camera(s) within ${radius} m. Nearest: ${Math.round(nearest.distance_meters)} m ${nearest.bearing} (${nearest.camera.manufacturer || "ALPR"}). Coordinates are not stored.`
-    : `No publicly mapped ALPR cameras within ${radius} m. Public maps are incomplete.`;
+  $("response").textContent = status.recommended_action;
 }
 
 async function ensureCamerasAround(lat, lon) {
@@ -322,6 +480,23 @@ async function checkSpot(coords, options = {}) {
     $("response").textContent = data.narrative || "";
     $("trace").textContent = "Agent: proximity";
     renderAlerts(data.alerts || []);
+    if (data.recommended_action) {
+      renderLiveStatus(
+        {
+          level: data.level,
+          count: data.count,
+          flock_count: data.flock_count,
+          recommended_action: data.recommended_action,
+          hud: data.hud,
+          nearest: (data.alerts || [])[0],
+          nearest_flock: (data.alerts || []).find((item) => isFlockCamera(item.camera)),
+        },
+        { tracking: false }
+      );
+      highlightNearest(
+        (data.alerts || []).find((item) => isFlockCamera(item.camera)) || (data.alerts || [])[0]
+      );
+    }
     const cameras = (data.alerts || []).map((alert) => alert.camera).filter(Boolean);
     if (cameras.length) {
       cameras.forEach((camera) => markerFor(camera).addTo(cameraLayer));
@@ -401,7 +576,13 @@ function startGpsFollow() {
   }
   stopTracking();
   setTrackingUi(true, "gps");
-  updateLiveHud("Following GPS… waiting for a fix");
+  $("live-level").textContent = "Live tracking on — waiting for GPS";
+  $("live-counts").textContent = "";
+  $("live-action").textContent =
+    "Allow location to watch mapped Flock cameras around you. Coordinates stay in the browser and are not stored.";
+  $("response").textContent =
+    "Live tracking on. Waiting for a GPS fix. Nearby Flock feedback and a recommended civic action will update as you move.";
+  updateLiveHud("LIVE · waiting for a GPS fix", "watch");
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
       onPosition(
@@ -410,23 +591,24 @@ function startGpsFollow() {
           lon: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
         },
-        "You (live GPS, not stored)"
+        "You (live tracking, not stored)"
       ).catch((err) => {
         $("response").textContent = String(err);
       });
     },
     (err) => {
-      $("response").textContent = err.message || "Could not follow GPS. Try localhost or HTTPS, and allow location.";
+      $("response").textContent = err.message || "Could not start live tracking. Try localhost or HTTPS, and allow location.";
       stopTracking();
     },
     GPS_OPTIONS
   );
 }
 
-function animateAlongPath(path, streets) {
+function animateAlongPath(path, streets, reverse) {
   const streetLabel = streets?.length ? streets.slice(0, 3).join(" → ") : "mapped streets";
+  demoWalkReverse = Boolean(reverse);
   setTrackingUi(true, "demo");
-  updateLiveHud(`Demo walk on ${streetLabel}`);
+  updateLiveHud(`Demo walk ${reverse ? "from" : "to"} on ${streetLabel}`);
   if (routeLayer) {
     map.removeLayer(routeLayer);
   }
@@ -441,7 +623,7 @@ function animateAlongPath(path, streets) {
   demoTimer = setInterval(() => {
     if (index >= path.length) {
       stopTracking();
-      $("response").textContent = "Demo walk finished on public streets. Turn on Follow my position to use real GPS.";
+      $("response").textContent = "Demo walk finished on public streets. Turn on Live tracking to use real GPS.";
       return;
     }
     const [lat, lon] = path[index];
@@ -452,32 +634,55 @@ function animateAlongPath(path, streets) {
   }, 450);
 }
 
-async function startDemoWalk() {
+async function startDemoWalk(reverse = false) {
+  if (tracking && followMode === "demo") {
+    stopTracking();
+    return;
+  }
   stopTracking();
   const preset = activePreset || presets[0];
   if (!preset) {
     $("response").textContent = "Pick a city first so the demo can route on local streets.";
     return;
   }
-  const start = lastCoords || { lat: preset.stand_lat, lon: preset.stand_lon };
-  setBusy(true, "Routing demo walk on streets…");
+  const origin =
+    originCoords ||
+    lastCoords || {
+      lat: preset.stand_lat,
+      lon: preset.stand_lon,
+      label: preset.stand_label,
+    };
+  const dest = destCoords || {
+    lat: preset.walk_dest_lat,
+    lon: preset.walk_dest_lon,
+    label: (preset.destinations && preset.destinations[0] && preset.destinations[0].name) || "Demo walk end",
+  };
+  if (!originCoords) {
+    setOrigin(origin.lat, origin.lon, origin.label || "Route from");
+  }
+  if (!destCoords) {
+    setDestination(dest.lat, dest.lon, dest.label || "Route to");
+  }
+  setBusy(true, reverse ? "Routing demo walk from…" : "Routing demo walk to…");
   try {
     const data = await fetchJson("/api/walk-route", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        lat: start.lat,
-        lon: start.lon,
-        dest_lat: preset.walk_dest_lat,
-        dest_lon: preset.walk_dest_lon,
+        lat: origin.lat,
+        lon: origin.lon,
+        dest_lat: dest.lat,
+        dest_lon: dest.lon,
+        reverse,
       }),
     });
     const path = (data.points || []).map((point) => [point.lat, point.lon]);
     if (path.length < 2) {
       throw new Error("No street geometry returned for this demo walk.");
     }
-    $("trace").textContent = `Street route (${data.source || "osrm"}) · ${data.distance_meters || "?"} m`;
-    animateAlongPath(path, data.streets || []);
+    $("trace").textContent =
+      `Street route ${reverse ? "from" : "to"} (${data.source || "osrm"}) · ${data.distance_meters || "?"} m`;
+    animateAlongPath(path, data.streets || [], reverse);
   } catch (err) {
     $("response").textContent = String(err);
     setTrackingUi(false);
@@ -506,6 +711,13 @@ function renderPresets() {
         place: preset.name,
         radius_meters: preset.scan_radius_meters,
       });
+      setOrigin(preset.stand_lat, preset.stand_lon, preset.stand_label);
+      const firstDest = (preset.destinations || [])[0];
+      if (firstDest) {
+        setDestination(firstDest.lat, firstDest.lon, firstDest.name);
+      } else if (preset.walk_dest_lat != null) {
+        setDestination(preset.walk_dest_lat, preset.walk_dest_lon, "Demo walk end");
+      }
       renderDestinations(preset);
     });
     root.appendChild(chip);
@@ -541,7 +753,8 @@ $("stand-preset").addEventListener("click", () => {
   if (!preset) return;
   stopTracking();
   standAt(preset.stand_lat, preset.stand_lon, `You · ${preset.stand_label}`);
-  $("response").textContent = `Standing at ${preset.stand_label}. Click Check this spot or Demo walk.`;
+  setOrigin(preset.stand_lat, preset.stand_lon, preset.stand_label);
+  $("response").textContent = `Standing at ${preset.stand_label}. Set Route to, then recommend or demo walk.`;
 });
 
 $("check-spot").addEventListener("click", async () => {
@@ -563,7 +776,7 @@ $("near-me").addEventListener("click", async () => {
   }
 });
 
-$("follow-me").addEventListener("click", () => {
+$("live-track").addEventListener("click", () => {
   if (tracking && followMode === "gps") {
     stopTracking();
     return;
@@ -571,12 +784,12 @@ $("follow-me").addEventListener("click", () => {
   startGpsFollow();
 });
 
-$("demo-walk").addEventListener("click", () => {
-  if (tracking && followMode === "demo") {
-    stopTracking();
-    return;
-  }
-  startDemoWalk();
+$("demo-walk-to").addEventListener("click", () => {
+  startDemoWalk(false);
+});
+
+$("demo-walk-from").addEventListener("click", () => {
+  startDemoWalk(true);
 });
 
 $("stop-follow").addEventListener("click", () => {
@@ -589,8 +802,25 @@ function clearPrivacyRoutes() {
   privacyLayers = [];
 }
 
+function setOrigin(lat, lon, label) {
+  originCoords = { lat, lon, label: label || "Route from" };
+  $("origin").value = originCoords.label;
+  if (originMarker) {
+    originMarker.setLatLng([lat, lon]);
+  } else {
+    originMarker = L.circleMarker([lat, lon], {
+      radius: 8,
+      color: "#5ee0a0",
+      fillColor: "#5ee0a0",
+      fillOpacity: 1,
+      weight: 2,
+    }).addTo(map);
+  }
+  originMarker.bindPopup(escapeHtml(originCoords.label));
+}
+
 function setDestination(lat, lon, label) {
-  destCoords = { lat, lon, label: label || "Destination" };
+  destCoords = { lat, lon, label: label || "Route to" };
   $("destination").value = destCoords.label;
   if (destMarker) {
     destMarker.setLatLng([lat, lon]);
@@ -604,6 +834,46 @@ function setDestination(lat, lon, label) {
     }).addTo(map);
   }
   destMarker.bindPopup(escapeHtml(destCoords.label)).openPopup();
+}
+
+function swapEnds() {
+  const from = originCoords ? { ...originCoords } : null;
+  const to = destCoords ? { ...destCoords } : null;
+  const fromText = $("origin").value;
+  const toText = $("destination").value;
+  if (to) {
+    setOrigin(to.lat, to.lon, to.label);
+  } else {
+    originCoords = null;
+    $("origin").value = toText;
+    if (originMarker) {
+      map.removeLayer(originMarker);
+      originMarker = null;
+    }
+  }
+  if (from) {
+    setDestination(from.lat, from.lon, from.label);
+  } else {
+    destCoords = null;
+    $("destination").value = fromText;
+    if (destMarker) {
+      map.removeLayer(destMarker);
+      destMarker = null;
+    }
+  }
+}
+
+function setPointMode(mode) {
+  settingPoint = settingPoint === mode ? null : mode;
+  $("set-from-map").classList.toggle("tracking", settingPoint === "from");
+  $("set-dest-map").classList.toggle("tracking", settingPoint === "to");
+  if (settingPoint === "from") {
+    $("response").textContent = "Click the map to set Route from.";
+  } else if (settingPoint === "to") {
+    $("response").textContent = "Click the map to set Route to.";
+  } else {
+    $("response").textContent = "Map click cancelled.";
+  }
 }
 
 function renderDestinations(preset) {
@@ -636,8 +906,11 @@ function drawPrivacyRoutes(data) {
     ).addTo(map);
     privacyLayers.push(line);
   });
+  if (data.origin_lat && data.origin_lon) {
+    setOrigin(data.origin_lat, data.origin_lon, data.origin || "Route from");
+  }
   if (data.dest_lat && data.dest_lon) {
-    setDestination(data.dest_lat, data.dest_lon, data.destination || "Destination");
+    setDestination(data.dest_lat, data.dest_lon, data.destination || "Route to");
   }
   if (privacyLayers.length) {
     map.fitBounds(privacyLayers[0].getBounds(), { padding: [40, 40] });
@@ -664,27 +937,43 @@ function renderRouteOptions(data) {
   });
 }
 
-async function recommendRoute() {
+async function recommendRoute(reverse = false) {
   const preset = activePreset || presets[0];
-  const origin = lastCoords || (preset ? { lat: preset.stand_lat, lon: preset.stand_lon } : null);
-  if (!origin) {
-    $("response").textContent = "Stand somewhere first, or pick a demo city.";
+  const stand = lastCoords || (preset ? { lat: preset.stand_lat, lon: preset.stand_lon, label: preset.stand_label } : null);
+  const originText = $("origin").value.trim();
+  const destText = $("destination").value.trim();
+  const origin = originCoords || (!originText ? stand : null);
+  const dest = destCoords;
+  if (!origin && !originText && !stand) {
+    $("response").textContent = "Set Route from, stand somewhere, or pick a demo city.";
     return;
   }
-  const body = { lat: origin.lat, lon: origin.lon, scan: true };
+  if (!dest && !destText) {
+    $("response").textContent = "Set Route to: pick a chip, type a place, or click the map.";
+    return;
+  }
+  const start = origin || stand;
+  const body = {
+    lat: start.lat,
+    lon: start.lon,
+    scan: true,
+    reverse,
+    origin: originText || (origin && origin.label) || undefined,
+    destination: destText || (dest && dest.label) || undefined,
+  };
+  if (originCoords) {
+    body.origin_lat = originCoords.lat;
+    body.origin_lon = originCoords.lon;
+  } else if (!originText && start) {
+    body.origin_lat = start.lat;
+    body.origin_lon = start.lon;
+    body.origin = start.label || body.origin;
+  }
   if (destCoords) {
     body.dest_lat = destCoords.lat;
     body.dest_lon = destCoords.lon;
-    body.destination = destCoords.label;
-  } else {
-    const named = $("destination").value.trim();
-    if (!named) {
-      $("response").textContent = "Set a destination chip, type a place, or click the map.";
-      return;
-    }
-    body.destination = named;
   }
-  setBusy(true, "Comparing public-road routes…");
+  setBusy(true, reverse ? "Comparing routes from…" : "Comparing routes to…");
   try {
     const data = await fetchJson("/api/privacy-route", {
       method: "POST",
@@ -694,7 +983,9 @@ async function recommendRoute() {
     drawPrivacyRoutes(data);
     renderRouteOptions(data);
     $("response").textContent = data.narrative || "";
-    $("trace").textContent = "Privacy route planner · public roads only";
+    $("trace").textContent = reverse
+      ? "Privacy route planner · from destination back to origin · public roads only"
+      : "Privacy route planner · origin to destination · public roads only";
     renderAlerts(
       (data.recommended?.cameras || []).slice(0, 8).map((camera) => ({
         camera,
@@ -711,18 +1002,31 @@ async function recommendRoute() {
 $("route-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    await recommendRoute();
+    await recommendRoute(false);
   } catch (err) {
     $("response").textContent = String(err);
   }
 });
 
+$("route-from").addEventListener("click", async () => {
+  try {
+    await recommendRoute(true);
+  } catch (err) {
+    $("response").textContent = String(err);
+  }
+});
+
+$("set-from-map").addEventListener("click", () => {
+  setPointMode("from");
+});
+
 $("set-dest-map").addEventListener("click", () => {
-  settingDest = !settingDest;
-  $("set-dest-map").classList.toggle("tracking", settingDest);
-  $("response").textContent = settingDest
-    ? "Click the map to set your destination."
-    : "Destination click cancelled.";
+  setPointMode("to");
+});
+
+$("swap-ends").addEventListener("click", () => {
+  swapEnds();
+  $("response").textContent = "Swapped Route from and Route to.";
 });
 
 $("chat-form").addEventListener("submit", async (event) => {
@@ -738,10 +1042,16 @@ $("chat-form").addEventListener("submit", async (event) => {
 
 map.on("click", (event) => {
   if (tracking) return;
-  if (settingDest) {
+  if (settingPoint === "from") {
+    setOrigin(event.latlng.lat, event.latlng.lng, "Map origin");
+    setPointMode(null);
+    $("response").textContent = "Route from set. Recommend route to, or demo walk.";
+    return;
+  }
+  if (settingPoint === "to") {
     setDestination(event.latlng.lat, event.latlng.lng, "Map destination");
-    settingDest = false;
-    $("set-dest-map").classList.remove("tracking");
+    setPointMode(null);
+    $("response").textContent = "Route to set. Recommend a route or start a demo walk.";
     return;
   }
   standAt(event.latlng.lat, event.latlng.lng, "You (map click, not stored)");
@@ -752,7 +1062,7 @@ async function boot() {
     const health = await fetchJson("/api/health");
     $("health").textContent = health.llm_enabled
       ? `LLM supervisor on (${health.provider}). Map scan works without a key.`
-      : "No LLM key — map scan, live follow, and keyword agents still work.";
+      : "No LLM key — map scan, live tracking, and keyword agents still work.";
   } catch {
     $("health").textContent = "API unreachable.";
   }

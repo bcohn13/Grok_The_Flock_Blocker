@@ -4,6 +4,7 @@ from typing import Any
 
 from flock_blocker.config import get_settings
 from flock_blocker.geo import compass_bearing
+from flock_blocker.live_track import assess_live_status
 from flock_blocker.llm import llm_text
 from flock_blocker.models import NearbyAlert
 from flock_blocker.store import cameras_near, upsert_cameras
@@ -66,18 +67,12 @@ def run_proximity(
         "osm_error": osm_error,
         "alerts": [a.model_dump() for a in alerts],
     }
+    status = assess_live_status(payload["alerts"], radius)
+    payload["level"] = status["level"]
+    payload["flock_count"] = status["flock_count"]
+    payload["trend"] = status["trend"]
+    payload["hud"] = status["hud"]
+    payload["recommended_action"] = status["recommended_action"]
     llm_summary = llm_text(PROXIMITY_SYSTEM, str(payload)[:6000]) if use_llm else None
-    if llm_summary:
-        narrative = llm_summary
-    elif alerts:
-        narrative = (
-            f"{len(alerts)} publicly mapped ALPR camera(s) are within {radius} meters. "
-            "Only you received this notice; your coordinates are not stored."
-        )
-    else:
-        narrative = (
-            f"No publicly mapped ALPR cameras were found within {radius} meters. "
-            "That does not mean the area is camera-free — public maps are incomplete."
-        )
-    payload["narrative"] = narrative
+    payload["narrative"] = llm_summary or status["recommended_action"]
     return payload

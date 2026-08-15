@@ -130,10 +130,31 @@ def walking_route(
     lon: float,
     dest_lat: float | None = None,
     dest_lon: float | None = None,
+    reverse: bool = False,
 ) -> dict[str, Any]:
-    nearest = min(SF_FOURTH_STREET, key=lambda p: haversine_meters(lat, lon, p[0], p[1]))
-    if haversine_meters(lat, lon, nearest[0], nearest[1]) < 500:
-        return fallback_route(lat, lon)
+    if reverse and dest_lat is not None and dest_lon is not None:
+        lat, lon, dest_lat, dest_lon = dest_lat, dest_lon, lat, lon
+        reverse = False
     if dest_lat is None or dest_lon is None:
-        dest_lat, dest_lon = lat + 0.005, lon
-    return fetch_osrm_route(lat, lon, dest_lat, dest_lon)
+        nearest = min(SF_FOURTH_STREET, key=lambda p: haversine_meters(lat, lon, p[0], p[1]))
+        if haversine_meters(lat, lon, nearest[0], nearest[1]) < 500:
+            result = fallback_route(lat, lon)
+        else:
+            result = fetch_osrm_route(lat, lon, lat + 0.005, lon)
+    else:
+        try:
+            result = fetch_osrm_route(lat, lon, dest_lat, dest_lon)
+        except Exception:
+            nearest = min(SF_FOURTH_STREET, key=lambda p: haversine_meters(lat, lon, p[0], p[1]))
+            if haversine_meters(lat, lon, nearest[0], nearest[1]) < 800:
+                result = fallback_route(lat, lon)
+            else:
+                raise
+    if reverse:
+        result = {
+            **result,
+            "points": list(reversed(result["points"])),
+            "streets": list(reversed(result.get("streets") or [])),
+            "source": f"{result.get('source')}-reverse",
+        }
+    return result

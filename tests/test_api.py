@@ -61,6 +61,8 @@ def test_scan_and_nearby(monkeypatch):
     assert nearby.status_code == 200
     assert nearby.json()["count"] >= 1
     assert nearby.json()["alerts"]
+    assert nearby.json()["recommended_action"]
+    assert nearby.json()["level"] in {"clear", "watch", "nearby", "close"}
 
     live_calls = {"n": 0}
 
@@ -75,6 +77,8 @@ def test_scan_and_nearby(monkeypatch):
     )
     assert live.status_code == 200
     assert live.json()["count"] >= 1
+    assert live.json()["recommended_action"]
+    assert live.json()["level"] == "close"
     assert live_calls["n"] == 0
 
 
@@ -111,7 +115,7 @@ def test_walk_route_endpoint(monkeypatch):
     client = TestClient(create_app())
     monkeypatch.setattr(
         "flock_blocker.api.walking_route",
-        lambda lat, lon, dest_lat, dest_lon: {
+        lambda lat, lon, dest_lat=None, dest_lon=None, reverse=False: {
             "points": [(37.780882, -122.399749), (37.78119, -122.400131)],
             "streets": ["4th Street"],
             "distance_meters": 48,
@@ -127,11 +131,26 @@ def test_walk_route_endpoint(monkeypatch):
     assert body["streets"] == ["4th Street"]
     assert body["points"][0]["lat"] == 37.780882
 
+    reversed_walk = client.post(
+        "/api/walk-route",
+        json={
+            "lat": 37.7809,
+            "lon": -122.3997,
+            "dest_lat": 37.7857,
+            "dest_lon": -122.4059,
+            "reverse": True,
+        },
+    )
+    assert reversed_walk.status_code == 200
+
 
 def test_index_served():
     client = TestClient(create_app())
     page = client.get("/")
     assert page.status_code == 200
     assert b"Grok the Flock Blocker" in page.content
-    assert b"Follow my position" in page.content
-    assert b"Recommend route" in page.content
+    assert b"Live tracking" in page.content
+    assert b"Recommend route to" in page.content
+    assert b"Recommend route from" in page.content
+    assert b"Demo walk from" in page.content
+    assert b"Route from" in page.content
