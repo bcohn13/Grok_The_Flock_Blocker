@@ -45,7 +45,7 @@ Suggested demo path (no GPS required):
 
 1. Click **San Francisco** (or another city chip). The map loads public OSM ALPR tags.
 2. Click **Stand at demo spot**, then **Check this spot**.
-3. Click **Live tracking** to keep the yellow marker on your GPS and get continuous nearby Flock / ALPR feedback plus a recommended civic action. Coordinates stay in the browser and are not stored.
+3. Click **Live tracking** to keep the yellow marker on your GPS and get continuous nearby Flock / ALPR feedback plus a recommended civic action. It plants a few fake Flock pins around you so the live demo works even if OSM has none nearby. **Add demo Flocks near me** does the same around your stand/GPS without starting tracking. Coordinates stay in the browser and are not stored.
 4. Click **Live demo walk to** or **Live demo walk from** to run that live feed along the same **Route from** / **Route to** used for Recommend (current location, a search, a chip, or a map click). It shouts **FLOCKBLOCK** when you get close.
 5. Click anywhere on the map to stand there instead (disabled while following).
 6. Set **Route from** and **Route to** with **From/To: current location**, a Maps-style search, a place chip, or a map click. Those same ends drive **Recommend route** and **Live demo walk**.
