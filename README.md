@@ -29,7 +29,7 @@ flowchart TD
 
 If `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set, the supervisor and write-ups use an LLM. Without a key, a keyword supervisor still runs the same tools — useful for demos and tests.
 
-## Quick start
+## Quick start — testable UI
 
 ```bash
 python -m venv .venv
@@ -40,6 +40,16 @@ uvicorn flock_blocker.api:app --reload --port 8000
 ```
 
 Open [http://localhost:8000](http://localhost:8000).
+
+Suggested demo path (no GPS required):
+
+1. Click **San Francisco** (or another city chip). The map loads public OSM ALPR tags.
+2. Click **Stand at demo spot**.
+3. Click **Check this spot**. The proximity agent lists cameras within the radius slider.
+4. Click anywhere on the map to stand there instead.
+5. Use **Ask the agents** for policy questions or a natural-language city search.
+
+Map scan hits OpenStreetMap only (usually a few seconds). Agent chat may also search the public web.
 
 CLI:
 

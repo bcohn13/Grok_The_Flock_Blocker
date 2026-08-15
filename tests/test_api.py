@@ -1,13 +1,71 @@
 from fastapi.testclient import TestClient
 
 from flock_blocker.api import create_app
+from flock_blocker.models import Camera
 
 
-def test_health_and_cameras():
+def test_health_presets_and_cameras():
     client = TestClient(create_app())
     health = client.get("/api/health")
     assert health.status_code == 200
     assert health.json()["ok"] is True
+    presets = client.get("/api/presets")
+    assert presets.status_code == 200
+    names = {item["name"] for item in presets.json()["presets"]}
+    assert "San Francisco" in names
     cameras = client.get("/api/cameras")
     assert cameras.status_code == 200
     assert "cameras" in cameras.json()
+
+
+def test_scan_requires_location():
+    client = TestClient(create_app())
+    response = client.post("/api/scan", json={})
+    assert response.status_code == 400
+
+
+def test_scan_and_nearby(monkeypatch):
+    client = TestClient(create_app())
+    monkeypatch.setattr(
+        "flock_blocker.scan.query_alpr_around",
+        lambda lat, lon, radius_meters=None: [
+            Camera(
+                id="osm-99",
+                lat=lat,
+                lon=lon,
+                manufacturer="Flock Safety",
+                source="openstreetmap",
+                city="Testville",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "flock_blocker.agents.proximity.query_alpr_around",
+        lambda lat, lon, radius_meters=None: [
+            Camera(
+                id="osm-99",
+                lat=lat,
+                lon=lon,
+                manufacturer="Flock Safety",
+                source="openstreetmap",
+                city="Testville",
+            )
+        ],
+    )
+    scanned = client.post("/api/scan", json={"lat": 30.26, "lon": -97.74, "place": "Austin"})
+    assert scanned.status_code == 200
+    body = scanned.json()
+    assert body["count"] == 1
+    assert body["flock_count"] == 1
+    nearby = client.post("/api/nearby", json={"lat": 30.26, "lon": -97.74, "radius_meters": 200})
+    assert nearby.status_code == 200
+    assert nearby.json()["count"] >= 1
+    assert nearby.json()["alerts"]
+
+
+def test_index_served():
+    client = TestClient(create_app())
+    page = client.get("/")
+    assert page.status_code == 200
+    assert b"Grok the Flock Blocker" in page.content
+    assert b"Check this spot" in page.content
