@@ -6,9 +6,11 @@ PRESETS: list[dict[str, object]] = [
         "name": "San Francisco",
         "lat": 37.7749,
         "lon": -122.4194,
-        "stand_lat": 37.7797,
-        "stand_lon": -122.3981,
-        "stand_label": "4th & Harrison area",
+        "stand_lat": 37.780654,
+        "stand_lon": -122.399998,
+        "stand_label": "4th & Harrison",
+        "walk_dest_lat": 37.785714,
+        "walk_dest_lon": -122.405916,
         "scan_radius_meters": 4000,
     },
     {
@@ -19,6 +21,8 @@ PRESETS: list[dict[str, object]] = [
         "stand_lat": 30.2672,
         "stand_lon": -97.7431,
         "stand_label": "downtown Austin",
+        "walk_dest_lat": 30.2742,
+        "walk_dest_lon": -97.7404,
         "scan_radius_meters": 5000,
     },
     {
@@ -29,6 +33,8 @@ PRESETS: list[dict[str, object]] = [
         "stand_lat": 41.8781,
         "stand_lon": -87.6298,
         "stand_label": "Loop",
+        "walk_dest_lat": 41.8839,
+        "walk_dest_lon": -87.6278,
         "scan_radius_meters": 4000,
     },
     {
@@ -39,6 +45,8 @@ PRESETS: list[dict[str, object]] = [
         "stand_lat": 40.7128,
         "stand_lon": -74.006,
         "stand_label": "City Hall area",
+        "walk_dest_lat": 40.7178,
+        "walk_dest_lon": -74.005,
         "scan_radius_meters": 4000,
     },
     {
@@ -49,6 +57,8 @@ PRESETS: list[dict[str, object]] = [
         "stand_lat": 33.749,
         "stand_lon": -84.388,
         "stand_label": "downtown Atlanta",
+        "walk_dest_lat": 33.7555,
+        "walk_dest_lon": -84.388,
         "scan_radius_meters": 5000,
     },
 ]

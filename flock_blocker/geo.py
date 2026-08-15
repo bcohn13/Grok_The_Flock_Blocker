@@ -25,6 +25,25 @@ def compass_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> str:
     return labels[int((degrees + 22.5) / 45) % 8]
 
 
+def densify_path(points: list[tuple[float, float]], spacing_meters: float = 20.0) -> list[tuple[float, float]]:
+    """Insert points so consecutive samples are at most spacing_meters apart.
+
+    Intended for already-on-road polylines (OSM centerlines or OSRM geometry).
+    """
+    if len(points) < 2:
+        return list(points)
+    out: list[tuple[float, float]] = [points[0]]
+    for start, end in zip(points, points[1:]):
+        distance = haversine_meters(start[0], start[1], end[0], end[1])
+        steps = max(1, math.ceil(distance / spacing_meters)) if distance else 1
+        for i in range(1, steps + 1):
+            t = i / steps
+            out.append((start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t))
+        if out[-1] != end:
+            out.append(end)
+    return out
+
+
 def bbox_from_point(lat: float, lon: float, radius_meters: float) -> tuple[float, float, float, float]:
     """Return (south, west, north, east) bounding box around a point."""
     d_lat = radius_meters / 111_320

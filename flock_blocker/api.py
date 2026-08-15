@@ -14,6 +14,7 @@ from flock_blocker.graph import run_turn
 from flock_blocker.presets import PRESETS
 from flock_blocker.scan import scan_area, scan_place
 from flock_blocker.store import all_cameras, load_store
+from flock_blocker.walk_route import walking_route
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -31,6 +32,13 @@ class NearbyRequest(BaseModel):
     radius_meters: int | None = Field(default=None, ge=50, le=50_000)
     refresh_osm: bool = True
     live: bool = False
+
+
+class WalkRouteRequest(BaseModel):
+    lat: float
+    lon: float
+    dest_lat: float | None = None
+    dest_lon: float | None = None
 
 
 class ScanRequest(BaseModel):
@@ -109,6 +117,24 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Proximity lookup failed: {exc}") from exc
         return result
+
+    @app.post("/api/walk-route")
+    def walk_route(payload: WalkRouteRequest) -> dict[str, object]:
+        try:
+            result = walking_route(
+                payload.lat,
+                payload.lon,
+                payload.dest_lat,
+                payload.dest_lon,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Street routing failed: {exc}") from exc
+        return {
+            "points": [{"lat": lat, "lon": lon} for lat, lon in result["points"]],
+            "streets": result["streets"],
+            "distance_meters": result["distance_meters"],
+            "source": result["source"],
+        }
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

@@ -46,7 +46,7 @@ Suggested demo path (no GPS required):
 1. Click **San Francisco** (or another city chip). The map loads public OSM ALPR tags.
 2. Click **Stand at demo spot**, then **Check this spot**.
 3. Click **Follow my position** to keep the yellow marker on your live GPS and refresh nearby alerts as you move. Coordinates stay in the browser and are not stored.
-4. Click **Demo walk** if you cannot share GPS — it simulates movement through downtown San Francisco.
+4. Click **Demo walk** if you cannot share GPS — it routes on public streets (4th Street in San Francisco) instead of cutting through buildings.
 5. Click anywhere on the map to stand there instead (disabled while following).
 6. Use **Ask the agents** for policy questions or a natural-language city search.
 

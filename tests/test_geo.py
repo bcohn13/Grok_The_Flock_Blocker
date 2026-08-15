@@ -1,4 +1,4 @@
-from flock_blocker.geo import bbox_from_point, compass_bearing, haversine_meters
+from flock_blocker.geo import bbox_from_point, compass_bearing, densify_path, haversine_meters
 
 
 def test_haversine_zero():
@@ -19,3 +19,10 @@ def test_bbox_contains_point():
     south, west, north, east = bbox_from_point(37.77, -122.42, 500)
     assert south < 37.77 < north
     assert west < -122.42 < east
+
+
+def test_densify_keeps_steps_short():
+    points = densify_path([(37.780882, -122.399749), (37.782633, -122.401933)], 20)
+    assert len(points) > 2
+    for start, end in zip(points, points[1:]):
+        assert haversine_meters(start[0], start[1], end[0], end[1]) <= 22
