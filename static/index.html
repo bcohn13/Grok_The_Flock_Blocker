@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grok the Flock Blocker</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23f2c14e'/></svg>" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="panel">
+        <header>
+          <p class="eyebrow">Hackathon · testable UI</p>
+          <h1>Grok the Flock Blocker</h1>
+          <p class="lede">
+            Scan public OpenStreetMap ALPR tags, then stand on the map to see
+            whether <em>you</em> are near a reported camera. Nothing is sent to
+            Flock or the police.
+          </p>
+        </header>
+
+        <section class="status" id="health">Loading…</section>
+
+        <section>
+          <label>Demo cities</label>
+          <div class="chips" id="presets"></div>
+        </section>
+
+        <form id="scan-form">
+          <label for="place">Or scan a place</label>
+          <div class="row">
+            <input id="place" type="text" placeholder="Austin, TX" />
+            <button type="submit">Scan map</button>
+          </div>
+        </form>
+
+        <div class="stats" id="stats">No scan yet. Pick a city or click the map.</div>
+
+        <div class="row wrap">
+          <button type="button" id="stand-preset">Stand at demo spot</button>
+          <button type="button" id="check-spot">Check this spot</button>
+          <button type="button" id="near-me">Use my GPS</button>
+        </div>
+        <p class="hint">
+          Click the map to stand anywhere. “Check this spot” only notifies you.
+          GPS is optional.
+        </p>
+
+        <label for="radius">Alert radius: <span id="radius-label">400</span> m</label>
+        <input id="radius" type="range" min="100" max="1500" step="50" value="400" />
+
+        <form id="chat-form">
+          <label for="message">Ask the agents</label>
+          <textarea
+            id="message"
+            rows="2"
+            placeholder="What’s the public debate about ALPR data sharing in Chicago?"
+          ></textarea>
+          <div class="row">
+            <button type="submit">Run agents</button>
+          </div>
+        </form>
+
+        <div class="trace" id="trace"></div>
+        <article class="response" id="response">
+          Try San Francisco → Scan map → Stand at demo spot → Check this spot.
+        </article>
+        <ul class="alerts" id="alerts"></ul>
+        <ul class="sources" id="sources"></ul>
+      </aside>
+      <main>
+        <div id="busy" class="busy hidden">Working…</div>
+        <div id="map"></div>
+        <div class="legend">
+          <span><i class="dot osm"></i> OSM ALPR</span>
+          <span><i class="dot flock"></i> Flock Safety</span>
+          <span><i class="dot news"></i> News pin</span>
+          <span><i class="dot seed"></i> Demo seed</span>
+          <span><i class="dot you"></i> You</span>
+        </div>
+      </main>
+    </div>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
