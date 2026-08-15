@@ -45,15 +45,32 @@ def node_to_camera(node: dict[str, Any]) -> Camera:
     )
 
 
+OVERPASS_FALLBACKS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+)
+
+
 def query_alpr_around(lat: float, lon: float, radius_meters: int | None = None) -> list[Camera]:
     """Query the public Overpass API for OSM nodes tagged as ALPR cameras."""
     settings = get_settings()
     radius = radius_meters or settings.search_radius_meters
     query = OVERPASS_QUERY.format(radius=int(radius), lat=lat, lon=lon)
+    urls = [settings.overpass_url, *[url for url in OVERPASS_FALLBACKS if url != settings.overpass_url]]
+    last_error: Exception | None = None
+    payload: dict[str, Any] | None = None
     with httpx.Client(timeout=40.0, headers={"User-Agent": settings.user_agent}) as client:
-        response = client.post(settings.overpass_url, data={"data": query})
-        response.raise_for_status()
-        payload = response.json()
+        for url in urls:
+            try:
+                response = client.post(url, data={"data": query})
+                response.raise_for_status()
+                payload = response.json()
+                break
+            except Exception as exc:
+                last_error = exc
+                continue
+    if payload is None:
+        raise last_error or RuntimeError("Overpass lookup failed")
     cameras: list[Camera] = []
     for element in payload.get("elements", []):
         if element.get("type") != "node":
