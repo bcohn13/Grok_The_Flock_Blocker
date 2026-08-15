@@ -6,6 +6,7 @@ import httpx
 
 from flock_blocker.config import get_settings
 from flock_blocker.geo import densify_path, haversine_meters
+from flock_blocker.tools.geocode import geocode_place
 
 # Pedestrian-legal OSM centerline of 4th Street, San Francisco, from Harrison
 # toward Market. Consecutive points are on the same roadway, not block diagonals.
@@ -31,13 +32,29 @@ SF_FOURTH_STREET: list[tuple[float, float]] = [
 ]
 
 
-def _osrm_urls() -> list[str]:
+def _osrm_targets(prefer_foot: bool = True) -> list[tuple[str, str, str]]:
+    """(base_url, profile, source_label) for Maps-style walking, then driving."""
     settings = get_settings()
-    primary = getattr(settings, "osrm_url", "https://router.project-osrm.org")
-    return [
-        primary.rstrip("/"),
-        "https://router.project-osrm.org",
+    primary = getattr(settings, "osrm_url", "https://router.project-osrm.org").rstrip("/")
+    foot = [
+        ("https://routing.openstreetmap.de/routed-foot", "driving", "osrm-foot"),
+        ("https://router.project-osrm.org", "driving", "osrm"),
     ]
+    car = [
+        (primary, "driving", "osrm"),
+        ("https://router.project-osrm.org", "driving", "osrm"),
+        ("https://routing.openstreetmap.de/routed-car", "driving", "osrm-car"),
+    ]
+    ordered = foot + car if prefer_foot else car + foot
+    unique: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for base, profile, label in ordered:
+        key = (base, profile)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((base, profile, label))
+    return unique
 
 
 def _route_from_osrm(route: dict[str, Any], source: str) -> dict[str, Any]:
@@ -46,15 +63,25 @@ def _route_from_osrm(route: dict[str, Any], source: str) -> dict[str, Any]:
     if len(points) < 2:
         raise ValueError("OSRM geometry was too short")
     streets: list[str] = []
+    steps: list[str] = []
     for leg in route.get("legs") or []:
         for step in leg.get("steps") or []:
             name = (step.get("name") or "").strip()
             if name and name not in streets:
                 streets.append(name)
+            maneuver = step.get("maneuver") or {}
+            instruction = (maneuver.get("instruction") or "").strip()
+            if not instruction:
+                kind = (maneuver.get("modifier") or maneuver.get("type") or "").strip()
+                instruction = f"{kind} {name}".strip() if name else kind
+            if instruction and instruction not in steps:
+                steps.append(instruction)
     return {
         "points": densify_path(points, 25.0),
         "streets": streets,
+        "steps": steps[:24],
         "distance_meters": round(float(route.get("distance") or 0)),
+        "duration_seconds": round(float(route.get("duration") or 0)),
         "source": source,
     }
 
@@ -65,13 +92,14 @@ def fetch_osrm_candidates(
     dest_lat: float,
     dest_lon: float,
     via: tuple[float, float] | None = None,
+    prefer_foot: bool = True,
 ) -> list[dict[str, Any]]:
-    """Return legal public-road driving routes, including OSRM alternatives."""
+    """Return legal public-road routes, preferring pedestrian geometry like Maps walking."""
     settings = get_settings()
     if via:
         path = f"{lon},{lat};{via[1]},{via[0]};{dest_lon},{dest_lat}"
         params = {"overview": "full", "geometries": "geojson", "steps": "true"}
-        label = "osrm-via"
+        label_suffix = "-via"
     else:
         path = f"{lon},{lat};{dest_lon},{dest_lat}"
         params = {
@@ -80,16 +108,16 @@ def fetch_osrm_candidates(
             "steps": "true",
             "alternatives": "true",
         }
-        label = "osrm"
+        label_suffix = ""
     last_error: Exception | None = None
     with httpx.Client(timeout=20.0, headers={"User-Agent": settings.user_agent}) as client:
-        for base in dict.fromkeys(_osrm_urls()):
+        for base, profile, label in _osrm_targets(prefer_foot=prefer_foot):
             try:
-                response = client.get(f"{base}/route/v1/driving/{path}", params=params)
+                response = client.get(f"{base}/route/v1/{profile}/{path}", params=params)
                 response.raise_for_status()
                 routes: list[dict[str, Any]] = []
                 for index, route in enumerate(response.json().get("routes") or []):
-                    source = f"{label}-{index}" if index else label
+                    source = f"{label}{label_suffix}-{index}" if index else f"{label}{label_suffix}"
                     routes.append(_route_from_osrm(route, source))
                 if routes:
                     return routes
@@ -120,7 +148,9 @@ def fallback_route(lat: float, lon: float) -> dict[str, Any]:
     return {
         "points": points,
         "streets": ["4th Street"],
+        "steps": ["Walk along 4th Street"],
         "distance_meters": round(distance),
+        "duration_seconds": round(distance / 1.4),
         "source": "osm-centerline",
     }
 
@@ -131,7 +161,13 @@ def walking_route(
     dest_lat: float | None = None,
     dest_lon: float | None = None,
     reverse: bool = False,
+    origin: str | None = None,
+    destination: str | None = None,
 ) -> dict[str, Any]:
+    if (dest_lat is None or dest_lon is None) and destination and destination.strip():
+        geo = geocode_place(destination)
+        if geo:
+            dest_lat, dest_lon = float(geo["lat"]), float(geo["lon"])
     if reverse and dest_lat is not None and dest_lon is not None:
         lat, lon, dest_lat, dest_lon = dest_lat, dest_lon, lat, lon
         reverse = False

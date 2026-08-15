@@ -805,18 +805,26 @@ async function startDemoWalk(reverse = false) {
     $("response").textContent = "Pick a city first so the live demo walk can route on local streets.";
     return;
   }
-  const origin =
-    originCoords ||
-    lastCoords || {
-      lat: preset.stand_lat,
-      lon: preset.stand_lon,
-      label: preset.stand_label,
-    };
-  const dest = destCoords || {
-    lat: preset.walk_dest_lat,
-    lon: preset.walk_dest_lon,
-    label: (preset.destinations && preset.destinations[0] && preset.destinations[0].name) || "Demo walk end",
-  };
+  let origin;
+  let dest;
+  try {
+    origin =
+      (await resolveTypedEnd("from")) ||
+      lastCoords || {
+        lat: preset.stand_lat,
+        lon: preset.stand_lon,
+        label: preset.stand_label,
+      };
+    dest =
+      (await resolveTypedEnd("to")) || {
+        lat: preset.walk_dest_lat,
+        lon: preset.walk_dest_lon,
+        label: (preset.destinations && preset.destinations[0] && preset.destinations[0].name) || "Demo walk end",
+      };
+  } catch (err) {
+    $("response").textContent = String(err);
+    return;
+  }
   if (!originCoords) {
     setOrigin(origin.lat, origin.lon, origin.label || "Route from");
   }
@@ -1086,11 +1094,15 @@ function renderRouteOptions(data) {
     const item = document.createElement("li");
     if (index === 0) item.className = "best";
     const km = (route.distance_meters / 1000).toFixed(2);
+    const minutes = route.duration_seconds ? Math.max(1, Math.round(route.duration_seconds / 60)) : null;
+    const steps = (route.steps || []).slice(0, 4).join(" → ");
     item.innerHTML =
       `<strong>${index === 0 ? "Recommended" : "Alternative"}</strong> · ` +
       `${route.camera_count} mapped cameras` +
       (route.flock_count ? ` (${route.flock_count} Flock)` : "") +
-      ` · ${km} km`;
+      ` · ${km} km` +
+      (minutes ? ` · ${minutes} min walk` : "") +
+      (steps ? `<div>${escapeHtml(steps)}</div>` : "");
     item.addEventListener("click", () => {
       if (!privacyLayers[index]) return;
       map.fitBounds(privacyLayers[index].getBounds(), { padding: [40, 40] });
@@ -1099,43 +1111,129 @@ function renderRouteOptions(data) {
   });
 }
 
+function pinMatchesText(coords, text) {
+  if (!coords) return false;
+  if (!text) return true;
+  return (coords.label || "").trim().toLowerCase() === text.trim().toLowerCase();
+}
+
+async function geocodeQuery(text) {
+  const preset = activePreset || presets[0];
+  const bias =
+    lastCoords ||
+    originCoords ||
+    destCoords ||
+    (preset ? { lat: preset.lat, lon: preset.lon } : null);
+  const params = new URLSearchParams({ q: text });
+  if (bias) {
+    params.set("lat", String(bias.lat));
+    params.set("lon", String(bias.lon));
+  }
+  const data = await fetchJson(`/api/geocode?${params.toString()}`);
+  return data.results || [];
+}
+
+async function resolveTypedEnd(kind) {
+  const text = $(kind === "from" ? "origin" : "destination").value.trim();
+  const coords = kind === "from" ? originCoords : destCoords;
+  if (pinMatchesText(coords, text)) return coords;
+  if (!text) return coords;
+  const results = await geocodeQuery(text);
+  const hit = results[0];
+  if (!hit) {
+    throw new Error(`Could not find "${text}". Pick a suggestion from the list.`);
+  }
+  if (kind === "from") setOrigin(hit.lat, hit.lon, hit.label);
+  else setDestination(hit.lat, hit.lon, hit.label);
+  return { lat: hit.lat, lon: hit.lon, label: hit.label };
+}
+
+function hideSuggest(kind) {
+  const list = $(kind === "from" ? "origin-suggest" : "destination-suggest");
+  list.hidden = true;
+  list.innerHTML = "";
+}
+
+function bindPlaceSearch(kind) {
+  const input = $(kind === "from" ? "origin" : "destination");
+  const list = $(kind === "from" ? "origin-suggest" : "destination-suggest");
+  let timer = null;
+  input.addEventListener("input", () => {
+    if (kind === "from" && originCoords && !pinMatchesText(originCoords, input.value)) {
+      originCoords = null;
+    }
+    if (kind === "to" && destCoords && !pinMatchesText(destCoords, input.value)) {
+      destCoords = null;
+    }
+    clearTimeout(timer);
+    const query = input.value.trim();
+    if (query.length < 2) {
+      hideSuggest(kind);
+      return;
+    }
+    timer = setTimeout(async () => {
+      try {
+        const results = await geocodeQuery(query);
+        list.innerHTML = "";
+        if (!results.length) {
+          list.hidden = true;
+          return;
+        }
+        results.forEach((hit) => {
+          const item = document.createElement("li");
+          item.textContent = hit.label;
+          item.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            if (kind === "from") setOrigin(hit.lat, hit.lon, hit.label);
+            else setDestination(hit.lat, hit.lon, hit.label);
+            hideSuggest(kind);
+          });
+          list.appendChild(item);
+        });
+        list.hidden = false;
+      } catch {
+        hideSuggest(kind);
+      }
+    }, 220);
+  });
+  input.addEventListener("blur", () => {
+    setTimeout(() => hideSuggest(kind), 180);
+  });
+}
+
 async function recommendRoute(reverse = false) {
   const preset = activePreset || presets[0];
   const stand = lastCoords || (preset ? { lat: preset.stand_lat, lon: preset.stand_lon, label: preset.stand_label } : null);
-  const originText = $("origin").value.trim();
-  const destText = $("destination").value.trim();
-  const origin = originCoords || (!originText ? stand : null);
-  const dest = destCoords;
-  if (!origin && !originText && !stand) {
-    $("response").textContent = "Set Route from, stand somewhere, or pick a demo city.";
+  let from = null;
+  let to = null;
+  try {
+    from = (await resolveTypedEnd("from")) || stand;
+    to = await resolveTypedEnd("to");
+  } catch (err) {
+    $("response").textContent = String(err);
     return;
   }
-  if (!dest && !destText) {
-    $("response").textContent = "Set Route to: pick a chip, type a place, or click the map.";
+  if (!from) {
+    $("response").textContent = "Set Route from: type a place, pick a suggestion, or stand somewhere.";
     return;
   }
-  const start = origin || stand;
+  if (!to) {
+    $("response").textContent = "Set Route to: type a place, pick a suggestion, or click the map.";
+    return;
+  }
   const body = {
-    lat: start.lat,
-    lon: start.lon,
+    lat: from.lat,
+    lon: from.lon,
+    origin_lat: from.lat,
+    origin_lon: from.lon,
+    dest_lat: to.lat,
+    dest_lon: to.lon,
+    origin: from.label || $("origin").value.trim(),
+    destination: to.label || $("destination").value.trim(),
     scan: true,
     reverse,
-    origin: originText || (origin && origin.label) || undefined,
-    destination: destText || (dest && dest.label) || undefined,
   };
-  if (originCoords) {
-    body.origin_lat = originCoords.lat;
-    body.origin_lon = originCoords.lon;
-  } else if (!originText && start) {
-    body.origin_lat = start.lat;
-    body.origin_lon = start.lon;
-    body.origin = start.label || body.origin;
-  }
-  if (destCoords) {
-    body.dest_lat = destCoords.lat;
-    body.dest_lon = destCoords.lon;
-  }
-  setBusy(true, reverse ? "Comparing routes from…" : "Comparing routes to…");
+  setBusy(true, reverse ? "Comparing walking routes from…" : "Comparing walking routes to…");
   try {
     const data = await fetchJson("/api/privacy-route", {
       method: "POST",
@@ -1146,8 +1244,8 @@ async function recommendRoute(reverse = false) {
     renderRouteOptions(data);
     $("response").textContent = data.narrative || "";
     $("trace").textContent = reverse
-      ? "Privacy route planner · from destination back to origin · public roads only"
-      : "Privacy route planner · origin to destination · public roads only";
+      ? "Walking directions · from destination back to origin"
+      : "Walking directions · origin to destination";
     renderAlerts(
       (data.recommended?.cameras || []).slice(0, 8).map((camera) => ({
         camera,
@@ -1233,6 +1331,8 @@ async function boot() {
     presets = data.presets || [];
     renderPresets();
     if (presets[0]) renderDestinations(presets[0]);
+    bindPlaceSearch("from");
+    bindPlaceSearch("to");
   } catch {
     $("response").textContent = "Could not load demo cities.";
   }
