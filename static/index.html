@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grok the Flock Blocker</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="panel">
+        <header>
+          <p class="eyebrow">Hackathon · LangGraph multi-agent</p>
+          <h1>Grok the Flock Blocker</h1>
+          <p class="lede">
+            Public-source awareness for ALPR / Flock cameras. One agent searches
+            OpenStreetMap and the open web. Another alerts <em>you</em> — only you —
+            if you opt in and are near a mapped camera.
+          </p>
+        </header>
+
+        <section class="status" id="health">Loading…</section>
+
+        <form id="chat-form">
+          <label for="message">Ask the agents</label>
+          <textarea
+            id="message"
+            rows="3"
+            placeholder="Find publicly mapped ALPR cameras in Austin, TX"
+          ></textarea>
+          <div class="row">
+            <button type="submit">Run agents</button>
+            <button type="button" id="near-me">Check near me</button>
+          </div>
+          <p class="hint">
+            Location is used for this check only and is not stored. Sources are
+            public OSM tags and news reports, not Flock or police systems.
+          </p>
+        </form>
+
+        <div class="trace" id="trace"></div>
+        <article class="response" id="response">
+          Try: “Find Flock cameras reported in Austin” or “What’s the public
+          debate about ALPR data sharing in Chicago?”
+        </article>
+        <ul class="sources" id="sources"></ul>
+      </aside>
+      <main>
+        <div id="map"></div>
+        <div class="legend">
+          <span><i class="dot osm"></i> OpenStreetMap ALPR</span>
+          <span><i class="dot news"></i> News / city-level pin</span>
+          <span><i class="dot seed"></i> Demo seed</span>
+          <span><i class="dot you"></i> You (opt-in)</span>
+        </div>
+      </main>
+    </div>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

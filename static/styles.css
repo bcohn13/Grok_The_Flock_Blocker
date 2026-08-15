@@ -1,0 +1,171 @@
+:root {
+  --bg: #0b0d10;
+  --panel: #12151b;
+  --ink: #e8edf2;
+  --muted: #93a0b0;
+  --line: #2a3140;
+  --accent: #f2c14e;
+  --alert: #ff6b4a;
+  --osm: #5ee0a0;
+  --news: #7ab8ff;
+  --seed: #9aa4b2;
+  --you: #f2c14e;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+.app {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+}
+
+.panel {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  padding: 1.25rem;
+  overflow: auto;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+  color: var(--accent);
+  margin: 0 0 0.4rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.6rem;
+}
+
+.lede,
+.hint,
+.status,
+.trace {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+label {
+  display: block;
+  margin: 1rem 0 0.4rem;
+  font-weight: 600;
+}
+
+textarea {
+  width: 100%;
+  background: #0b0d10;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.75rem;
+  resize: vertical;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+button {
+  background: var(--accent);
+  color: #1a1403;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button[type="button"] {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.response {
+  margin-top: 1rem;
+  white-space: pre-wrap;
+  background: #0b0d10;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.9rem;
+}
+
+.sources {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}
+
+.sources a {
+  color: var(--news);
+}
+
+#map {
+  height: 100%;
+  min-height: 420px;
+}
+
+main {
+  position: relative;
+}
+
+.legend {
+  position: absolute;
+  z-index: 500;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(18, 21, 27, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.dot.osm {
+  background: var(--osm);
+}
+.dot.news {
+  background: var(--news);
+}
+.dot.seed {
+  background: var(--seed);
+}
+.dot.you {
+  background: var(--you);
+}
+
+@media (max-width: 860px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 55vh;
+  }
+}
