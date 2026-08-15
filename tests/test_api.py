@@ -78,6 +78,27 @@ def test_scan_and_nearby(monkeypatch):
     assert live_calls["n"] == 0
 
 
+def test_walk_route_endpoint(monkeypatch):
+    client = TestClient(create_app())
+    monkeypatch.setattr(
+        "flock_blocker.api.walking_route",
+        lambda lat, lon, dest_lat, dest_lon: {
+            "points": [(37.780882, -122.399749), (37.78119, -122.400131)],
+            "streets": ["4th Street"],
+            "distance_meters": 48,
+            "source": "osm-centerline",
+        },
+    )
+    response = client.post(
+        "/api/walk-route",
+        json={"lat": 37.7809, "lon": -122.3997, "dest_lat": 37.7857, "dest_lon": -122.4059},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["streets"] == ["4th Street"]
+    assert body["points"][0]["lat"] == 37.780882
+
+
 def test_index_served():
     client = TestClient(create_app())
     page = client.get("/")

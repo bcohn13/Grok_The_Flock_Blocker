@@ -18,17 +18,10 @@ let tracking = false;
 let followMode = null;
 let lastAlertKey = "";
 let scanningAround = false;
+let routeLayer = null;
 
 const RESCAN_METERS = 1800;
 const GPS_OPTIONS = { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 };
-const DEMO_PATH = [
-  [37.7797, -122.3981],
-  [37.7804, -122.3994],
-  [37.7811, -122.4008],
-  [37.7818, -122.4021],
-  [37.7826, -122.4034],
-  [37.7834, -122.4046],
-];
 
 const colors = {
   openstreetmap: "#5ee0a0",
@@ -386,6 +379,10 @@ function stopTracking() {
     clearInterval(demoTimer);
     demoTimer = null;
   }
+  if (routeLayer) {
+    map.removeLayer(routeLayer);
+    routeLayer = null;
+  }
   setTrackingUi(false);
 }
 
@@ -422,30 +419,67 @@ function startGpsFollow() {
   );
 }
 
-function interpolate(a, b, t) {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-}
-
-function startDemoWalk() {
-  stopTracking();
+function animateAlongPath(path, streets) {
+  const streetLabel = streets?.length ? streets.slice(0, 3).join(" → ") : "mapped streets";
   setTrackingUi(true, "demo");
-  updateLiveHud("Demo walk · simulated GPS");
-  let step = 0;
-  const stepsPerLeg = 8;
+  updateLiveHud(`Demo walk on ${streetLabel}`);
+  if (routeLayer) {
+    map.removeLayer(routeLayer);
+  }
+  routeLayer = L.polyline(path, {
+    color: "#f2c14e",
+    weight: 5,
+    opacity: 0.85,
+    dashArray: "10 8",
+  }).addTo(map);
+  map.fitBounds(routeLayer.getBounds(), { padding: [36, 36], maxZoom: 17 });
+  let index = 0;
   demoTimer = setInterval(() => {
-    const leg = Math.floor(step / stepsPerLeg);
-    if (leg >= DEMO_PATH.length - 1) {
+    if (index >= path.length) {
       stopTracking();
-      $("response").textContent = "Demo walk finished. Turn on Follow my position to use real GPS.";
+      $("response").textContent = "Demo walk finished on public streets. Turn on Follow my position to use real GPS.";
       return;
     }
-    const t = (step % stepsPerLeg) / stepsPerLeg;
-    const [lat, lon] = interpolate(DEMO_PATH[leg], DEMO_PATH[leg + 1], t);
-    onPosition({ lat, lon, accuracy: 12 }, "You (demo walk, not stored)").catch((err) => {
+    const [lat, lon] = path[index];
+    onPosition({ lat, lon, accuracy: 8 }, "You (demo walk on streets, not stored)").catch((err) => {
       $("response").textContent = String(err);
     });
-    step += 1;
-  }, 700);
+    index += 1;
+  }, 450);
+}
+
+async function startDemoWalk() {
+  stopTracking();
+  const preset = activePreset || presets[0];
+  if (!preset) {
+    $("response").textContent = "Pick a city first so the demo can route on local streets.";
+    return;
+  }
+  const start = lastCoords || { lat: preset.stand_lat, lon: preset.stand_lon };
+  setBusy(true, "Routing demo walk on streets…");
+  try {
+    const data = await fetchJson("/api/walk-route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lat: start.lat,
+        lon: start.lon,
+        dest_lat: preset.walk_dest_lat,
+        dest_lon: preset.walk_dest_lon,
+      }),
+    });
+    const path = (data.points || []).map((point) => [point.lat, point.lon]);
+    if (path.length < 2) {
+      throw new Error("No street geometry returned for this demo walk.");
+    }
+    $("trace").textContent = `Street route (${data.source || "osrm"}) · ${data.distance_meters || "?"} m`;
+    animateAlongPath(path, data.streets || []);
+  } catch (err) {
+    $("response").textContent = String(err);
+    setTrackingUi(false);
+  } finally {
+    setBusy(false);
+  }
 }
 
 function renderPresets() {
