@@ -78,6 +78,35 @@ def test_scan_and_nearby(monkeypatch):
     assert live_calls["n"] == 0
 
 
+def test_privacy_route_endpoint(monkeypatch):
+    client = TestClient(create_app())
+    monkeypatch.setattr(
+        "flock_blocker.api.plan_privacy_route",
+        lambda *args, **kwargs: {
+            "destination": "Ferry Building",
+            "dest_lat": 37.7955,
+            "dest_lon": -122.3937,
+            "recommended": {
+                "points": [{"lat": 37.78, "lon": -122.4}],
+                "camera_count": 2,
+                "flock_count": 2,
+                "distance_meters": 1800,
+                "streets": ["The Embarcadero"],
+                "cameras": [],
+            },
+            "alternatives": [],
+            "narrative": "demo",
+            "disclaimer": "not evade",
+        },
+    )
+    response = client.post(
+        "/api/privacy-route",
+        json={"lat": 37.7809, "lon": -122.3998, "destination": "Ferry Building", "scan": False},
+    )
+    assert response.status_code == 200
+    assert response.json()["recommended"]["camera_count"] == 2
+
+
 def test_walk_route_endpoint(monkeypatch):
     client = TestClient(create_app())
     monkeypatch.setattr(
@@ -105,4 +134,4 @@ def test_index_served():
     assert page.status_code == 200
     assert b"Grok the Flock Blocker" in page.content
     assert b"Follow my position" in page.content
-    assert b"Demo walk" in page.content
+    assert b"Recommend route" in page.content

@@ -48,7 +48,8 @@ Suggested demo path (no GPS required):
 3. Click **Follow my position** to keep the yellow marker on your live GPS and refresh nearby alerts as you move. Coordinates stay in the browser and are not stored.
 4. Click **Demo walk** if you cannot share GPS — it routes on public streets (4th Street in San Francisco) instead of cutting through buildings.
 5. Click anywhere on the map to stand there instead (disabled while following).
-6. Use **Ask the agents** for policy questions or a natural-language city search.
+6. Set a destination (Ferry Building chip, typed place, or **Click map for destination**) and hit **Recommend route**. The planner compares legal public-road options and prefers the one with the fewest mapped ALPR cameras.
+7. Use **Ask the agents** for policy questions or a natural-language city search.
 
 Map scan hits OpenStreetMap only (usually a few seconds). Agent chat may also search the public web.
 

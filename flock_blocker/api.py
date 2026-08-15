@@ -11,6 +11,7 @@ from flock_blocker import __version__
 from flock_blocker.agents.proximity import run_proximity
 from flock_blocker.config import get_settings
 from flock_blocker.graph import run_turn
+from flock_blocker.privacy_route import plan_privacy_route
 from flock_blocker.presets import PRESETS
 from flock_blocker.scan import scan_area, scan_place
 from flock_blocker.store import all_cameras, load_store
@@ -39,6 +40,15 @@ class WalkRouteRequest(BaseModel):
     lon: float
     dest_lat: float | None = None
     dest_lon: float | None = None
+
+
+class PrivacyRouteRequest(BaseModel):
+    lat: float
+    lon: float
+    dest_lat: float | None = None
+    dest_lon: float | None = None
+    destination: str | None = Field(default=None, max_length=200)
+    scan: bool = True
 
 
 class ScanRequest(BaseModel):
@@ -135,6 +145,22 @@ def create_app() -> FastAPI:
             "distance_meters": result["distance_meters"],
             "source": result["source"],
         }
+
+    @app.post("/api/privacy-route")
+    def privacy_route(payload: PrivacyRouteRequest) -> dict[str, object]:
+        try:
+            return plan_privacy_route(
+                payload.lat,
+                payload.lon,
+                dest_lat=payload.dest_lat,
+                dest_lon=payload.dest_lon,
+                destination=payload.destination,
+                scan=payload.scan,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Privacy routing failed: {exc}") from exc
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

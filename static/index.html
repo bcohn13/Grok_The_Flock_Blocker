@@ -59,6 +59,22 @@
           public street geometry (not shortcuts through buildings).
         </p>
 
+        <form id="route-form">
+          <label for="destination">Route with fewer mapped cameras</label>
+          <input id="destination" type="text" placeholder="Ferry Building, San Francisco" />
+          <div class="chips" id="dest-presets"></div>
+          <div class="row wrap">
+            <button type="submit">Recommend route</button>
+            <button type="button" id="set-dest-map">Click map for destination</button>
+          </div>
+          <p class="hint">
+            Compares legal public-road options and prefers the one with the fewest
+            mapped ALPR cameras. Maps are incomplete — this is not a way to evade
+            police or become invisible.
+          </p>
+        </form>
+        <ul class="route-options" id="route-options"></ul>
+
         <label for="radius">Alert radius: <span id="radius-label">400</span> m</label>
         <input id="radius" type="range" min="100" max="1500" step="50" value="400" />
 
@@ -91,6 +107,7 @@
           <span><i class="dot news"></i> News pin</span>
           <span><i class="dot seed"></i> Demo seed</span>
           <span><i class="dot you"></i> You</span>
+          <span><i class="line rec"></i> Fewer cameras</span>
         </div>
       </main>
     </div>
