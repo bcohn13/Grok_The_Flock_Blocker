@@ -40,11 +40,7 @@ def _osrm_urls() -> list[str]:
     ]
 
 
-def _parse_osrm(payload: dict[str, Any]) -> tuple[list[tuple[float, float]], list[str], float]:
-    routes = payload.get("routes") or []
-    if not routes:
-        raise ValueError("OSRM returned no routes")
-    route = routes[0]
+def _route_from_osrm(route: dict[str, Any], source: str) -> dict[str, Any]:
     geometry = (route.get("geometry") or {}).get("coordinates") or []
     points = [(float(latlon[1]), float(latlon[0])) for latlon in geometry]
     if len(points) < 2:
@@ -55,32 +51,62 @@ def _parse_osrm(payload: dict[str, Any]) -> tuple[list[tuple[float, float]], lis
             name = (step.get("name") or "").strip()
             if name and name not in streets:
                 streets.append(name)
-    return points, streets, float(route.get("distance") or 0)
+    return {
+        "points": densify_path(points, 25.0),
+        "streets": streets,
+        "distance_meters": round(float(route.get("distance") or 0)),
+        "source": source,
+    }
+
+
+def fetch_osrm_candidates(
+    lat: float,
+    lon: float,
+    dest_lat: float,
+    dest_lon: float,
+    via: tuple[float, float] | None = None,
+) -> list[dict[str, Any]]:
+    """Return legal public-road driving routes, including OSRM alternatives."""
+    settings = get_settings()
+    if via:
+        path = f"{lon},{lat};{via[1]},{via[0]};{dest_lon},{dest_lat}"
+        params = {"overview": "full", "geometries": "geojson", "steps": "true"}
+        label = "osrm-via"
+    else:
+        path = f"{lon},{lat};{dest_lon},{dest_lat}"
+        params = {
+            "overview": "full",
+            "geometries": "geojson",
+            "steps": "true",
+            "alternatives": "true",
+        }
+        label = "osrm"
+    last_error: Exception | None = None
+    with httpx.Client(timeout=20.0, headers={"User-Agent": settings.user_agent}) as client:
+        for base in dict.fromkeys(_osrm_urls()):
+            try:
+                response = client.get(f"{base}/route/v1/driving/{path}", params=params)
+                response.raise_for_status()
+                routes: list[dict[str, Any]] = []
+                for index, route in enumerate(response.json().get("routes") or []):
+                    source = f"{label}-{index}" if index else label
+                    routes.append(_route_from_osrm(route, source))
+                if routes:
+                    return routes
+            except Exception as exc:
+                last_error = exc
+                continue
+    if last_error:
+        raise last_error
+    return []
 
 
 def fetch_osrm_route(lat: float, lon: float, dest_lat: float, dest_lon: float) -> dict[str, Any]:
     """Snap start/end to the public road network and return the on-road geometry."""
-    settings = get_settings()
-    path = f"{lon},{lat};{dest_lon},{dest_lat}"
-    params = {"overview": "full", "geometries": "geojson", "steps": "true"}
-    last_error: Exception | None = None
-    with httpx.Client(timeout=20.0, headers={"User-Agent": settings.user_agent}) as client:
-        for base in dict.fromkeys(_osrm_urls()):
-            for profile in ("foot", "driving"):
-                try:
-                    response = client.get(f"{base}/route/v1/{profile}/{path}", params=params)
-                    response.raise_for_status()
-                    points, streets, distance = _parse_osrm(response.json())
-                    return {
-                        "points": densify_path(points, 18.0),
-                        "streets": streets,
-                        "distance_meters": round(distance),
-                        "source": f"osrm-{profile}",
-                    }
-                except Exception as exc:
-                    last_error = exc
-                    continue
-    raise last_error or RuntimeError("OSRM lookup failed")
+    candidates = fetch_osrm_candidates(lat, lon, dest_lat, dest_lon)
+    if not candidates:
+        raise RuntimeError("OSRM lookup failed")
+    return candidates[0]
 
 
 def fallback_route(lat: float, lon: float) -> dict[str, Any]:

@@ -19,6 +19,10 @@ let followMode = null;
 let lastAlertKey = "";
 let scanningAround = false;
 let routeLayer = null;
+let destMarker = null;
+let destCoords = null;
+let settingDest = false;
+let privacyLayers = [];
 
 const RESCAN_METERS = 1800;
 const GPS_OPTIONS = { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 };
@@ -502,6 +506,7 @@ function renderPresets() {
         place: preset.name,
         radius_meters: preset.scan_radius_meters,
       });
+      renderDestinations(preset);
     });
     root.appendChild(chip);
   });
@@ -579,6 +584,147 @@ $("stop-follow").addEventListener("click", () => {
   $("response").textContent = "Stopped tracking. Last position was not stored.";
 });
 
+function clearPrivacyRoutes() {
+  privacyLayers.forEach((layer) => map.removeLayer(layer));
+  privacyLayers = [];
+}
+
+function setDestination(lat, lon, label) {
+  destCoords = { lat, lon, label: label || "Destination" };
+  $("destination").value = destCoords.label;
+  if (destMarker) {
+    destMarker.setLatLng([lat, lon]);
+  } else {
+    destMarker = L.circleMarker([lat, lon], {
+      radius: 8,
+      color: "#7ab8ff",
+      fillColor: "#7ab8ff",
+      fillOpacity: 1,
+      weight: 2,
+    }).addTo(map);
+  }
+  destMarker.bindPopup(escapeHtml(destCoords.label)).openPopup();
+}
+
+function renderDestinations(preset) {
+  const root = $("dest-presets");
+  root.innerHTML = "";
+  (preset.destinations || []).forEach((dest) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = dest.name;
+    chip.addEventListener("click", () => {
+      setDestination(dest.lat, dest.lon, dest.name);
+    });
+    root.appendChild(chip);
+  });
+}
+
+function drawPrivacyRoutes(data) {
+  clearPrivacyRoutes();
+  const alts = data.alternatives || [];
+  alts.forEach((route, index) => {
+    const isBest = index === 0;
+    const line = L.polyline(
+      (route.points || []).map((point) => [point.lat, point.lon]),
+      {
+        color: isBest ? "#f2c14e" : "#6d7786",
+        weight: isBest ? 6 : 3,
+        opacity: isBest ? 0.95 : 0.55,
+      }
+    ).addTo(map);
+    privacyLayers.push(line);
+  });
+  if (data.dest_lat && data.dest_lon) {
+    setDestination(data.dest_lat, data.dest_lon, data.destination || "Destination");
+  }
+  if (privacyLayers.length) {
+    map.fitBounds(privacyLayers[0].getBounds(), { padding: [40, 40] });
+  }
+}
+
+function renderRouteOptions(data) {
+  const list = $("route-options");
+  list.innerHTML = "";
+  (data.alternatives || []).forEach((route, index) => {
+    const item = document.createElement("li");
+    if (index === 0) item.className = "best";
+    const km = (route.distance_meters / 1000).toFixed(2);
+    item.innerHTML =
+      `<strong>${index === 0 ? "Recommended" : "Alternative"}</strong> · ` +
+      `${route.camera_count} mapped cameras` +
+      (route.flock_count ? ` (${route.flock_count} Flock)` : "") +
+      ` · ${km} km`;
+    item.addEventListener("click", () => {
+      if (!privacyLayers[index]) return;
+      map.fitBounds(privacyLayers[index].getBounds(), { padding: [40, 40] });
+    });
+    list.appendChild(item);
+  });
+}
+
+async function recommendRoute() {
+  const preset = activePreset || presets[0];
+  const origin = lastCoords || (preset ? { lat: preset.stand_lat, lon: preset.stand_lon } : null);
+  if (!origin) {
+    $("response").textContent = "Stand somewhere first, or pick a demo city.";
+    return;
+  }
+  const body = { lat: origin.lat, lon: origin.lon, scan: true };
+  if (destCoords) {
+    body.dest_lat = destCoords.lat;
+    body.dest_lon = destCoords.lon;
+    body.destination = destCoords.label;
+  } else {
+    const named = $("destination").value.trim();
+    if (!named) {
+      $("response").textContent = "Set a destination chip, type a place, or click the map.";
+      return;
+    }
+    body.destination = named;
+  }
+  setBusy(true, "Comparing public-road routes…");
+  try {
+    const data = await fetchJson("/api/privacy-route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    drawPrivacyRoutes(data);
+    renderRouteOptions(data);
+    $("response").textContent = data.narrative || "";
+    $("trace").textContent = "Privacy route planner · public roads only";
+    renderAlerts(
+      (data.recommended?.cameras || []).slice(0, 8).map((camera) => ({
+        camera,
+        distance_meters: camera.distance_meters,
+        bearing: "",
+        message: `${camera.manufacturer || "ALPR"} is about ${Math.round(camera.distance_meters)} m from this recommended roadway.`,
+      }))
+    );
+  } finally {
+    setBusy(false);
+  }
+}
+
+$("route-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await recommendRoute();
+  } catch (err) {
+    $("response").textContent = String(err);
+  }
+});
+
+$("set-dest-map").addEventListener("click", () => {
+  settingDest = !settingDest;
+  $("set-dest-map").classList.toggle("tracking", settingDest);
+  $("response").textContent = settingDest
+    ? "Click the map to set your destination."
+    : "Destination click cancelled.";
+});
+
 $("chat-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = $("message").value.trim();
@@ -592,6 +738,12 @@ $("chat-form").addEventListener("submit", async (event) => {
 
 map.on("click", (event) => {
   if (tracking) return;
+  if (settingDest) {
+    setDestination(event.latlng.lat, event.latlng.lng, "Map destination");
+    settingDest = false;
+    $("set-dest-map").classList.remove("tracking");
+    return;
+  }
   standAt(event.latlng.lat, event.latlng.lng, "You (map click, not stored)");
 });
 
@@ -608,6 +760,7 @@ async function boot() {
     const data = await fetchJson("/api/presets");
     presets = data.presets || [];
     renderPresets();
+    if (presets[0]) renderDestinations(presets[0]);
   } catch {
     $("response").textContent = "Could not load demo cities.";
   }

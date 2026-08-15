@@ -16,13 +16,18 @@ def haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
 
 def compass_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> str:
     """Cardinal direction from point 1 toward point 2."""
+    degrees = bearing_degrees(lat1, lon1, lat2, lon2)
+    labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    return labels[int((degrees + 22.5) / 45) % 8]
+
+
+def bearing_degrees(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Compass bearing in degrees from point 1 toward point 2."""
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     d_lambda = math.radians(lon2 - lon1)
     x = math.sin(d_lambda) * math.cos(phi2)
     y = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(d_lambda)
-    degrees = (math.degrees(math.atan2(x, y)) + 360) % 360
-    labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-    return labels[int((degrees + 22.5) / 45) % 8]
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
 
 
 def densify_path(points: list[tuple[float, float]], spacing_meters: float = 20.0) -> list[tuple[float, float]]:
@@ -42,6 +47,23 @@ def densify_path(points: list[tuple[float, float]], spacing_meters: float = 20.0
         if out[-1] != end:
             out.append(end)
     return out
+
+
+def destination_point(lat: float, lon: float, distance_meters: float, bearing_degrees: float) -> tuple[float, float]:
+    """Travel `distance_meters` from a point along a compass bearing."""
+    angular = distance_meters / EARTH_RADIUS_M
+    bearing = math.radians(bearing_degrees)
+    lat1 = math.radians(lat)
+    lon1 = math.radians(lon)
+    lat2 = math.asin(
+        math.sin(lat1) * math.cos(angular)
+        + math.cos(lat1) * math.sin(angular) * math.cos(bearing)
+    )
+    lon2 = lon1 + math.atan2(
+        math.sin(bearing) * math.sin(angular) * math.cos(lat1),
+        math.cos(angular) - math.sin(lat1) * math.sin(lat2),
+    )
+    return math.degrees(lat2), math.degrees(lon2)
 
 
 def bbox_from_point(lat: float, lon: float, radius_meters: float) -> tuple[float, float, float, float]:

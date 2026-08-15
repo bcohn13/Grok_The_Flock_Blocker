@@ -11,6 +11,11 @@ PRESETS: list[dict[str, object]] = [
         "stand_label": "4th & Harrison",
         "walk_dest_lat": 37.785714,
         "walk_dest_lon": -122.405916,
+        "destinations": [
+            {"name": "Ferry Building", "lat": 37.7955, "lon": -122.3937},
+            {"name": "Civic Center", "lat": 37.7793, "lon": -122.4193},
+            {"name": "Oracle Park", "lat": 37.7786, "lon": -122.3893},
+        ],
         "scan_radius_meters": 4000,
     },
     {

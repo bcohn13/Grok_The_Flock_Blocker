@@ -156,6 +156,35 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+.route-options {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+}
+
+.route-options li {
+  background: #0b0d10;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0.4rem;
+  cursor: pointer;
+}
+
+.route-options li.best {
+  border-color: var(--accent);
+}
+
+.line.rec {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  background: var(--accent);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 .alerts li {
   background: #1a1410;
   border: 1px solid #5a3328;
