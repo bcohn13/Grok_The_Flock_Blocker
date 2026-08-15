@@ -29,6 +29,8 @@ class NearbyRequest(BaseModel):
     lat: float
     lon: float
     radius_meters: int | None = Field(default=None, ge=50, le=50_000)
+    refresh_osm: bool = True
+    live: bool = False
 
 
 class ScanRequest(BaseModel):
@@ -101,6 +103,8 @@ def create_app() -> FastAPI:
                 payload.lat,
                 payload.lon,
                 payload.radius_meters,
+                refresh_osm=payload.refresh_osm and not payload.live,
+                use_llm=not payload.live,
             )
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Proximity lookup failed: {exc}") from exc

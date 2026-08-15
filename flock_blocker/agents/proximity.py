@@ -34,6 +34,7 @@ def run_proximity(
     lon: float,
     radius_meters: int | None = None,
     refresh_osm: bool = True,
+    use_llm: bool = True,
 ) -> dict[str, Any]:
     settings = get_settings()
     radius = radius_meters or settings.alert_radius_meters
@@ -65,7 +66,7 @@ def run_proximity(
         "osm_error": osm_error,
         "alerts": [a.model_dump() for a in alerts],
     }
-    llm_summary = llm_text(PROXIMITY_SYSTEM, str(payload)[:6000])
+    llm_summary = llm_text(PROXIMITY_SYSTEM, str(payload)[:6000]) if use_llm else None
     if llm_summary:
         narrative = llm_summary
     elif alerts:

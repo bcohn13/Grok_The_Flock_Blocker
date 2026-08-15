@@ -62,10 +62,26 @@ def test_scan_and_nearby(monkeypatch):
     assert nearby.json()["count"] >= 1
     assert nearby.json()["alerts"]
 
+    live_calls = {"n": 0}
+
+    def boom(*_args, **_kwargs):
+        live_calls["n"] += 1
+        raise AssertionError("live nearby should not refresh OSM")
+
+    monkeypatch.setattr("flock_blocker.agents.proximity.query_alpr_around", boom)
+    live = client.post(
+        "/api/nearby",
+        json={"lat": 30.26, "lon": -97.74, "radius_meters": 200, "live": True},
+    )
+    assert live.status_code == 200
+    assert live.json()["count"] >= 1
+    assert live_calls["n"] == 0
+
 
 def test_index_served():
     client = TestClient(create_app())
     page = client.get("/")
     assert page.status_code == 200
     assert b"Grok the Flock Blocker" in page.content
-    assert b"Check this spot" in page.content
+    assert b"Follow my position" in page.content
+    assert b"Demo walk" in page.content

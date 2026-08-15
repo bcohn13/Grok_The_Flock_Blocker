@@ -48,9 +48,15 @@
           <button type="button" id="check-spot">Check this spot</button>
           <button type="button" id="near-me">Use my GPS</button>
         </div>
-        <p class="hint">
-          Click the map to stand anywhere. “Check this spot” only notifies you.
-          GPS is optional.
+        <div class="row wrap">
+          <button type="button" id="follow-me">Follow my position</button>
+          <button type="button" id="demo-walk">Demo walk</button>
+          <button type="button" id="stop-follow" class="hidden">Stop tracking</button>
+        </div>
+        <p class="hint" id="follow-hint">
+          Click the map to stand anywhere, or turn on follow to track your live GPS.
+          Coordinates stay in the browser and are not stored. Demo walk simulates
+          movement so you can test without sharing location.
         </p>
 
         <label for="radius">Alert radius: <span id="radius-label">400</span> m</label>
@@ -77,6 +83,7 @@
       </aside>
       <main>
         <div id="busy" class="busy hidden">Working…</div>
+        <div id="live-hud" class="live-hud hidden">Not tracking</div>
         <div id="map"></div>
         <div class="legend">
           <span><i class="dot osm"></i> OSM ALPR</span>

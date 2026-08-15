@@ -178,7 +178,8 @@ main {
 }
 
 .legend,
-.busy {
+.busy,
+.live-hud {
   position: absolute;
   z-index: 500;
   background: rgba(18, 21, 27, 0.94);
@@ -203,8 +204,23 @@ main {
   padding: 0.5rem 0.9rem;
 }
 
+.live-hud {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem 0.9rem;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+button.tracking {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .dot {

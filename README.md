@@ -2,7 +2,7 @@
 
 A hackathon multi-agent toolkit for **surveillance awareness**. It finds *publicly reported* Flock / ALPR camera locations and can notify **you** (opt-in only) when you are near one.
 
-It does **not** connect to Flock Safety, police databases, or any private system. It does **not** track other people. Location is used for a single check and is not stored.
+It does **not** connect to Flock Safety, police databases, or any private system. It does **not** track other people. Opt-in GPS follow keeps coordinates in the browser only and does not save a location trail.
 
 ## Agents (LangGraph)
 
@@ -44,10 +44,11 @@ Open [http://localhost:8000](http://localhost:8000).
 Suggested demo path (no GPS required):
 
 1. Click **San Francisco** (or another city chip). The map loads public OSM ALPR tags.
-2. Click **Stand at demo spot**.
-3. Click **Check this spot**. The proximity agent lists cameras within the radius slider.
-4. Click anywhere on the map to stand there instead.
-5. Use **Ask the agents** for policy questions or a natural-language city search.
+2. Click **Stand at demo spot**, then **Check this spot**.
+3. Click **Follow my position** to keep the yellow marker on your live GPS and refresh nearby alerts as you move. Coordinates stay in the browser and are not stored.
+4. Click **Demo walk** if you cannot share GPS — it simulates movement through downtown San Francisco.
+5. Click anywhere on the map to stand there instead (disabled while following).
+6. Use **Ask the agents** for policy questions or a natural-language city search.
 
 Map scan hits OpenStreetMap only (usually a few seconds). Agent chat may also search the public web.
 
