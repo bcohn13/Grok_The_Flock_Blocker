@@ -52,20 +52,24 @@
           <button type="button" id="live-track">Live tracking</button>
           <button type="button" id="stop-follow" class="hidden">Stop tracking</button>
         </div>
+        <div class="row wrap">
+          <button type="button" id="demo-walk-to">Live demo walk to</button>
+          <button type="button" id="demo-walk-from">Live demo walk from</button>
+        </div>
         <section class="live-panel" id="live-panel">
           <div class="live-panel-head">
             <strong id="live-level">Live tracking off</strong>
             <span id="live-counts"></span>
           </div>
           <p id="live-action" class="live-action">
-            Turn on Live tracking to continuously watch mapped Flock / ALPR cameras
-            around you and get a recommended civic action. Coordinates stay in the
-            browser and are not stored.
+            Turn on Live tracking (GPS) or Live demo walk to continuously watch
+            mapped Flock / ALPR cameras and get a recommended civic action.
+            Coordinates stay in the browser and are not stored.
           </p>
         </section>
         <p class="hint" id="follow-hint">
-          Live tracking uses your GPS (or the demo walk) and updates nearby Flock
-          feedback as you move. Click the map to stand anywhere when tracking is off.
+          Live tracking uses GPS. Live demo walk simulates that same live feed
+          along Route from → Route to, so you can try it without sharing location.
         </p>
 
         <form id="route-form">
@@ -83,14 +87,11 @@
             <button type="submit" id="route-to">Recommend route to</button>
             <button type="button" id="route-from">Recommend route from</button>
           </div>
-          <div class="row wrap">
-            <button type="button" id="demo-walk-to">Demo walk to</button>
-            <button type="button" id="demo-walk-from">Demo walk from</button>
-          </div>
           <p class="hint">
             Recommend compares legal public-road options and prefers fewer mapped
-            ALPR cameras. Demo walk follows street geometry between From and To.
-            Maps are incomplete — this is not a way to evade police.
+            ALPR cameras. After From and To are set, Live demo walk runs the live
+            feed along that street path. Maps are incomplete — this is not a way
+            to evade police.
           </p>
         </form>
         <ul class="route-options" id="route-options"></ul>
