@@ -172,8 +172,39 @@ button:disabled {
   cursor: pointer;
 }
 
-.route-options li.best {
-  border-color: var(--accent);
+.suggest-wrap {
+  position: relative;
+}
+
+.suggest {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  background: #0b0d10;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.suggest li {
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.suggest li:last-child {
+  border-bottom: 0;
+}
+
+.suggest li:hover,
+.suggest li.active {
+  background: #1a2230;
 }
 
 .line.rec {

@@ -82,6 +82,19 @@ def test_scan_and_nearby(monkeypatch):
     assert live_calls["n"] == 0
 
 
+def test_geocode_endpoint(monkeypatch):
+    client = TestClient(create_app())
+    monkeypatch.setattr(
+        "flock_blocker.api.search_places",
+        lambda query, lat=None, lon=None, limit=6: [
+            {"lat": 37.7955, "lon": -122.3937, "label": "Ferry Building, San Francisco"}
+        ],
+    )
+    response = client.get("/api/geocode", params={"q": "Ferry Building", "lat": 37.78, "lon": -122.4})
+    assert response.status_code == 200
+    assert response.json()["results"][0]["label"].startswith("Ferry Building")
+
+
 def test_privacy_route_endpoint(monkeypatch):
     client = TestClient(create_app())
     monkeypatch.setattr(
@@ -115,7 +128,7 @@ def test_walk_route_endpoint(monkeypatch):
     client = TestClient(create_app())
     monkeypatch.setattr(
         "flock_blocker.api.walking_route",
-        lambda lat, lon, dest_lat=None, dest_lon=None, reverse=False: {
+        lambda lat, lon, dest_lat=None, dest_lon=None, reverse=False, origin=None, destination=None: {
             "points": [(37.780882, -122.399749), (37.78119, -122.400131)],
             "streets": ["4th Street"],
             "distance_meters": 48,
@@ -156,3 +169,4 @@ def test_index_served():
     assert b"Recommend route from" in page.content
     assert b"FLOCKBLOCK FLOCKBLOCK FLOCKBLOKK" in page.content
     assert b"demo Flock pins" in page.content
+    assert b"Search a start" in page.content

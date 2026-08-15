@@ -78,9 +78,15 @@
 
         <form id="route-form">
           <label for="origin">Route from</label>
-          <input id="origin" type="text" placeholder="4th &amp; Harrison, San Francisco" />
+          <div class="suggest-wrap">
+            <input id="origin" type="text" autocomplete="off" placeholder="Search a start, like 4th &amp; Harrison, San Francisco" />
+            <ul id="origin-suggest" class="suggest" hidden></ul>
+          </div>
           <label for="destination">Route to</label>
-          <input id="destination" type="text" placeholder="Ferry Building, San Francisco" />
+          <div class="suggest-wrap">
+            <input id="destination" type="text" autocomplete="off" placeholder="Search a destination, like Ferry Building" />
+            <ul id="destination-suggest" class="suggest" hidden></ul>
+          </div>
           <div class="chips" id="dest-presets"></div>
           <div class="row wrap">
             <button type="button" id="set-from-map">Click map for from</button>
@@ -92,10 +98,9 @@
             <button type="button" id="route-from">Recommend route from</button>
           </div>
           <p class="hint">
-            Recommend compares legal public-road options and prefers fewer mapped
-            ALPR cameras. After From and To are set, Live demo walk runs the live
-            feed along that street path. Maps are incomplete — this is not a way
-            to evade police.
+            Type From and To like Google Maps — pick a suggestion, then Recommend
+            or Live demo walk. Routing uses public walking directions on legal
+            streets. Maps are incomplete — this is not a way to evade police.
           </p>
         </form>
         <ul class="route-options" id="route-options"></ul>

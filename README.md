@@ -48,7 +48,7 @@ Suggested demo path (no GPS required):
 3. Click **Live tracking** to keep the yellow marker on your GPS and get continuous nearby Flock / ALPR feedback plus a recommended civic action. Coordinates stay in the browser and are not stored.
 4. Click **Live demo walk to** or **Live demo walk from** if you cannot share GPS — it runs that same live feed along street geometry between **Route from** and **Route to**, plants demo Flock pins on the path, and shouts **FLOCKBLOCK FLOCKBLOCK FLOCKBLOKK** when you get close (4th Street in San Francisco when those ends are unset).
 5. Click anywhere on the map to stand there instead (disabled while following).
-6. Set **Route from** and **Route to** (city stand + Ferry Building chip, typed places, or **Click map for from/to**). **Recommend route to** plans origin → destination; **Recommend route from** plans the other direction. The planner compares legal public-road options and prefers the one with the fewest mapped ALPR cameras.
+6. Type **Route from** and **Route to** like Google Maps and pick a suggestion (or use a chip / map click). **Recommend route to** / **from** fetch walking directions on public streets and prefer the option with fewer mapped ALPR cameras.
 7. Use **Ask the agents** for policy questions or a natural-language city search.
 
 Map scan hits OpenStreetMap only (usually a few seconds). Agent chat may also search the public web.

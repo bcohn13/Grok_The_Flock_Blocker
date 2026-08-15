@@ -16,6 +16,7 @@ from flock_blocker.presets import PRESETS
 from flock_blocker.scan import scan_area, scan_place
 from flock_blocker.store import all_cameras, load_store
 from flock_blocker.walk_route import walking_route
+from flock_blocker.tools.geocode import search_places
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -40,6 +41,8 @@ class WalkRouteRequest(BaseModel):
     lon: float
     dest_lat: float | None = None
     dest_lon: float | None = None
+    origin: str | None = Field(default=None, max_length=200)
+    destination: str | None = Field(default=None, max_length=200)
     reverse: bool = False
 
 
@@ -133,6 +136,13 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=502, detail=f"Proximity lookup failed: {exc}") from exc
         return result
 
+    @app.get("/api/geocode")
+    def geocode(q: str = "", lat: float | None = None, lon: float | None = None) -> dict[str, object]:
+        query = q.strip()
+        if len(query) < 2:
+            return {"results": []}
+        return {"results": search_places(query, lat=lat, lon=lon, limit=6)}
+
     @app.post("/api/walk-route")
     def walk_route(payload: WalkRouteRequest) -> dict[str, object]:
         try:
@@ -142,13 +152,17 @@ def create_app() -> FastAPI:
                 payload.dest_lat,
                 payload.dest_lon,
                 reverse=payload.reverse,
+                origin=payload.origin,
+                destination=payload.destination,
             )
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Street routing failed: {exc}") from exc
         return {
             "points": [{"lat": lat, "lon": lon} for lat, lon in result["points"]],
             "streets": result["streets"],
+            "steps": result.get("steps") or [],
             "distance_meters": result["distance_meters"],
+            "duration_seconds": result.get("duration_seconds") or 0,
             "source": result["source"],
         }
 

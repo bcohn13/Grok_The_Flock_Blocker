@@ -198,7 +198,9 @@ def _dump_route(route: dict[str, Any]) -> dict[str, Any]:
     return {
         "points": [{"lat": lat, "lon": lon} for lat, lon in route["points"]],
         "streets": route.get("streets") or [],
+        "steps": route.get("steps") or [],
         "distance_meters": route["distance_meters"],
+        "duration_seconds": route.get("duration_seconds") or 0,
         "source": route.get("source"),
         "camera_count": route["camera_count"],
         "flock_count": route["flock_count"],
