@@ -154,4 +154,4 @@ def test_index_served():
     assert b"Live demo walk from" in page.content
     assert b"Recommend route to" in page.content
     assert b"Recommend route from" in page.content
-    assert b"Route from" in page.content
+    assert b"FLOCKBLOCK FLOCKBLOCK FLOCKBLOKK" in page.content

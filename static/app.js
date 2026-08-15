@@ -29,6 +29,8 @@ let demoWalkGeneration = 0;
 let privacyLayers = [];
 let lastNearestMeters = null;
 let focusCircle = null;
+let flockVoiceOn = false;
+let flockVoiceWatch = null;
 
 const RESCAN_METERS = 1800;
 const GPS_OPTIONS = { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 };
@@ -312,6 +314,66 @@ function highlightNearest(alert) {
   }).addTo(map);
 }
 
+function pickObnoxiousVoice() {
+  const voices = window.speechSynthesis?.getVoices?.() || [];
+  const ranked = voices.filter((voice) => /en[-_]/i.test(voice.lang));
+  const funny = ranked.find((voice) => /whisper|novelty|zarvox|bad news|boing|hysterical|princess|belinda|fiona/i.test(voice.name));
+  const british = ranked.find((voice) => /female|samantha|karen|moira|tessa|google uk/i.test(voice.name));
+  return funny || british || ranked[0] || voices[0] || null;
+}
+
+function stopFlockVoice() {
+  flockVoiceOn = false;
+  if (flockVoiceWatch) {
+    clearInterval(flockVoiceWatch);
+    flockVoiceWatch = null;
+  }
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function shoutFlockBlock() {
+  if (!flockVoiceOn || !window.speechSynthesis) return;
+  const utter = new SpeechSynthesisUtterance("FLOCKBLOCK. FLOCKBLOCK. FLOCKBLOKK.");
+  const voice = pickObnoxiousVoice();
+  if (voice) utter.voice = voice;
+  utter.lang = voice?.lang || "en-US";
+  utter.rate = 1.35;
+  utter.pitch = 2;
+  utter.volume = 1;
+  utter.onend = () => {
+    if (flockVoiceOn) setTimeout(shoutFlockBlock, 60);
+  };
+  utter.onerror = () => {
+    if (flockVoiceOn) setTimeout(shoutFlockBlock, 250);
+  };
+  window.speechSynthesis.speak(utter);
+}
+
+function setFlockVoice(on) {
+  if (on) {
+    if (flockVoiceOn) {
+      if (window.speechSynthesis?.paused) window.speechSynthesis.resume();
+      return;
+    }
+    flockVoiceOn = true;
+    if (window.speechSynthesis?.getVoices) {
+      window.speechSynthesis.getVoices();
+    }
+    shoutFlockBlock();
+    if (!flockVoiceWatch) {
+      flockVoiceWatch = setInterval(() => {
+        if (!flockVoiceOn || !window.speechSynthesis) return;
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+        if (!window.speechSynthesis.speaking) shoutFlockBlock();
+      }, 400);
+    }
+    return;
+  }
+  stopFlockVoice();
+}
+
 function radiusMeters() {
   return Number($("radius").value);
 }
@@ -375,6 +437,7 @@ function setTrackingUi(on, mode, options = {}) {
   $("demo-walk-from").classList.toggle("tracking", mode === "demo" && on && demoWalkReverse);
   $("stop-follow").classList.toggle("hidden", !on);
   if (!on) {
+    stopFlockVoice();
     lastNearestMeters = null;
     if (options.keepStatus) {
       const hud = $("live-hud");
@@ -444,7 +507,13 @@ function applyAlerts(alerts, lat, lon, accuracy, sourceLabel) {
   if (tracking) {
     const hudText =
       followMode === "demo" ? status.hud.replace(/^LIVE ·/, "LIVE DEMO ·") : status.hud;
-    updateLiveHud(`${hudText}${acc}`, status.level);
+    updateLiveHud(
+      status.level === "close" ? `FLOCKBLOCK · ${hudText}${acc}` : `${hudText}${acc}`,
+      status.level
+    );
+    setFlockVoice(status.level === "close");
+  } else {
+    setFlockVoice(false);
   }
   if (tracking && key === lastAlertKey) {
     return;
@@ -1122,6 +1191,12 @@ async function boot() {
     if (stored.cameras?.length) drawCameras(stored.cameras);
   } catch {
     /* seed load is optional */
+  }
+  if (window.speechSynthesis?.getVoices) {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", () => {
+      window.speechSynthesis.getVoices();
+    });
   }
 }
 
